@@ -2,14 +2,16 @@ import { describe, expect, it } from "vitest";
 import { clientIp, isThrottled } from "./login-throttle";
 
 describe("isThrottled", () => {
-  it("allows under the threshold", () => {
-    expect(isThrottled({ emailFailures: 4, ipFailures: 4 })).toBe(false);
+  it("allows under the thresholds", () => {
     expect(isThrottled({ emailFailures: 0, ipFailures: 0 })).toBe(false);
+    expect(isThrottled({ emailFailures: 19, ipFailures: 4 })).toBe(false);
   });
-  it("blocks at 5 failures for the email OR the ip", () => {
-    expect(isThrottled({ emailFailures: 5, ipFailures: 0 })).toBe(true);
+  it("blocks an IP at 5 failures", () => {
     expect(isThrottled({ emailFailures: 0, ipFailures: 5 })).toBe(true);
-    expect(isThrottled({ emailFailures: 9, ipFailures: 9 })).toBe(true);
+  });
+  it("blocks an email at 20 failures from any mix of IPs, not 5", () => {
+    expect(isThrottled({ emailFailures: 5, ipFailures: 0 })).toBe(false);
+    expect(isThrottled({ emailFailures: 20, ipFailures: 0 })).toBe(true);
   });
 });
 
