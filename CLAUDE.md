@@ -31,35 +31,55 @@ Done:
 - Auth (2 users, scrypt + signed cookie), proxy guard
 - Dashboard: monthly profit + 6-month bars, booth rent expected vs collected, chairs filled, cash runway, expenses by category vs 3-month average
 - Transactions list by month, add, edit, delete
-- CSV import: header detection (single or debit/credit columns, preamble lines, sign inversion, memo column), editable mapping saved after first import, preview with duplicate flags and suggested categories, idempotent commit
-- Inbox: categorize, optional stylist, "remember" creates a rule and re-sorts the Inbox
-- Stylists: roster with weekly/biweekly/monthly rent, start/end dates, bank match text
-- Settings: chair count, opening balance, categories (add/rename/hide), rules
-- Reports: P&L for presets or custom range, summary CSV, detailed CSV, print / save as PDF
-- 52 unit tests across money, dates, CSV, categorization, metrics
+- CSV import:
+  - header detection (single or debit/credit columns, preamble lines, sign inversion, memo column);
+  - editable mapping, saved after the first import;
+  - preview with duplicate flags, suggested categories, and links to matching manual entries;
+  - atomic commit;
+  - mapping-independent dedupe hash;
+  - parse errors shown, and the import needs an acknowledgment when there are any.
+- Inbox:
+  - grouped by suggested merchant pattern: one pick sorts a group, and "remember" saves a rule;
+  - one-offs get per-row cards;
+  - Booth Rent + stylist remembers by extending the stylist's match text.
+- Categorization: stylist names match as whole words, only within the stylist's active window (14 days before start through 45 after end).
+- Stylists: roster with weekly/biweekly/monthly rent, start/end dates, bank match text.
+- Settings: chair count, opening balance, categories (add/rename/hide), rules (add/edit/delete with a live "Matches N past · M in Inbox" test).
+- Reports: P&L for presets or a custom range, summary CSV, detailed CSV, print / save as PDF.
+- Auth hardening: safe post-login redirect, login throttling (5 failures per IP / 20 per email in 15 min), session revocation via `users.session_version`, stronger scrypt, anchored proxy matcher, security headers.
+- Infra:
+  - Neon `quitbooks` with `production` and `dev` branches (see README "Deploy");
+  - node-postgres with `attachDatabasePool`;
+  - transactional migrations;
+  - Vercel project `drippy-projects/quitbooks`.
+- Fake data: `fake:bmo` / `fake:load` / `fake:score` / `db:wipe`, plus 12-month fixtures in `fixtures/`.
+- 216 unit tests. A browser click-through on the preview (against `dev`) passed for import, linking, Inbox, rules and headers. **Not yet checked at 390 px wide**: Chrome on macOS won't resize below 500 px, so use a phone or DevTools device mode.
 
 Review findings (P0/P1/P2 with file:line): `docs/reviews/2026-10-24-logic.md`, `docs/reviews/2026-10-24-security.md`.
 
 Data is not precious yet: wiping and re-importing is fine until John says otherwise, so don't contort a fix to preserve existing rows.
 
 Next up, in order:
-1. **Fabricated BMO data**: a seeded generator for N months of a booth-rent salon (Zelle rent, salon expenses, owner draws, realistic traps), in each plausible BMO export shape. Fixture tests against the importer. Replaces waiting on a real export; check against a real one when it turns up.
-2. **Neon + deploy**: Vercel + Neon, transactional migrations (review security P1-4), seed, load the fabricated data, John's and Lauren's logins.
-3. **Categorization** (review logic P1-1, P1-3, P1-4): stylist matching on whole words and active dates, contiguous "remember" patterns, Booth Rent remember tags the stylist. Plus Inbox bulk actions, "would catch N" preview, rule editing and a "test this rule" preview.
-4. **Hardening**:
-   - Import integrity: manual-vs-import double count (logic P0-1), a mapping-independent hash (logic P1-2), atomic commit, visible parse errors, 4 MB body limit.
-   - Auth: open redirect, login rate limiting (an attempts table; Vercel KV no longer exists), stored-hash validation.
-   - `.env.example`.
-5. **Everything else**:
+1. **Automatic bank sync from BMO (US) business checking.** This is the go/no-go for the whole app. Lauren's bar is QuickBooks Online's bank feed: transactions arrive by themselves and reconcile. Without that, the app isn't worth switching to.
+   - Pick a provider (research is in progress).
+   - Build a `bank_sync` source: a one-time link in Settings, then a daily Vercel Cron plus "Sync now".
+   - Dedupe by the provider's transaction id, then run `categorize()`, manual-entry linking and the Inbox.
+   - Store the provider-reported balance and show "BMO says $X · books say $Y".
+   - Cut over cleanly: the feed is the source of truth from the link date on. Block CSV imports that overlap it, because provider descriptions won't match BMO CSV text and the hash dedupe would miss them.
+2. **Go live**:
+   - merge `prelaunch` → `main` (deploys Production);
+   - John's and Lauren's logins via `user:add` against the `production` branch;
+   - a phone-width check;
+   - one guided Inbox session on real data.
+3. **Everything else**:
    - undo an import (by `import_batch_id`);
    - split a transaction;
    - password change screen;
-   - QuickBooks history;
+   - QuickBooks history (CSV export through the importer, for dates before the feed starts);
    - PWA polish;
-   - review P2s and product calls (runway vs owner draws, rent carry-forward);
-   - stretch: bank sync (Plaid / Teller / SimpleFIN; a `bank_sync` writer reusing `categorize()` and the dedupe hash).
+   - review P2s and product calls (runway vs owner draws, rent carry-forward, chair count).
 
 Known caveats:
 - Expected weekly/biweekly rent counts due dates from the stylist's start date; if real payment days differ, the month boundary can shift one payment between months. Fine for now; revisit if it confuses Lauren.
 - Cash runway needs an opening balance in Settings; balance = opening + everything recorded since that date.
-- `npm audit` reports advisories in dev-only tooling from the scaffold; review before deploy.
+- `npm audit --omit=dev` reports 4 highs. They all come from `zod` 4.1.11, pinned inside `@vercel/functions` → `@vercel/oidc` → `@vercel/cli-config`, which only parses local CLI config. The fix is a `package.json` override (`"overrides": {"@vercel/cli-config": {"zod": "$zod"}}`) plus a lockfile refresh. Not applied yet; needs John's OK.
