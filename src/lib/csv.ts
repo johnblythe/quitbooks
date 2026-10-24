@@ -116,13 +116,27 @@ function readAmount(record: Record<string, string>, mapping: CsvMapping): number
  */
 export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvParseResult {
   // Some banks prepend account info lines before the real header; skip to the first line
-  // that looks like a header (has a comma and a date-ish column name).
+  // that is a header. Prefer a line whose cells map to date + description + amount columns, so a
+  // preamble line like "Activity date range: 10/01 to 10/31, all transactions" isn't mistaken for it.
+  // Fall back to the first line with a comma and "date" in it (unknown headers, mapped by hand).
   const lines = text.replace(/^﻿/, "").split(/\r?\n/);
-  let start = 0;
-  for (let i = 0; i < Math.min(lines.length, 15); i++) {
-    if (/date/i.test(lines[i]) && lines[i].includes(",")) {
+  const scan = Math.min(lines.length, 15);
+  let start = -1;
+  for (let i = 0; i < scan; i++) {
+    if (!lines[i].includes(",")) continue;
+    const cells = Papa.parse<string[]>(lines[i]).data[0] ?? [];
+    if (detectMapping(cells.map((c) => c.trim()))) {
       start = i;
       break;
+    }
+  }
+  if (start < 0) {
+    start = 0;
+    for (let i = 0; i < scan; i++) {
+      if (/date/i.test(lines[i]) && lines[i].includes(",")) {
+        start = i;
+        break;
+      }
     }
   }
   const body = lines.slice(start).join("\n");

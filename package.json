@@ -14,6 +14,10 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:demo": "tsx scripts/demo-data.ts",
+    "db:wipe": "tsx scripts/db-wipe.ts",
+    "fake:bmo": "tsx scripts/fake-bmo-csv.ts",
+    "fake:load": "tsx scripts/fake-load.ts",
+    "fake:score": "tsx scripts/fake-score.ts",
     "user:add": "tsx scripts/add-user.ts"
   },
   "dependencies": {

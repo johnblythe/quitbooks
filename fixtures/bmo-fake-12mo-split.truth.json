@@ -1,0 +1,4282 @@
+{
+  "options": {
+    "months": 12,
+    "endMonth": "2026-09",
+    "seed": 42,
+    "format": "split",
+    "preamble": false,
+    "zelleSender": "memo",
+    "order": "oldest"
+  },
+  "rows": [
+    {
+      "date": "2025-10-01",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1525000
+    },
+    {
+      "date": "2025-10-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 1225000
+    },
+    {
+      "date": "2025-10-02",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 1330000,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2025-10-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1327000
+    },
+    {
+      "date": "2025-10-04",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1354500
+    },
+    {
+      "date": "2025-10-05",
+      "amountCents": -6994,
+      "description": "POS PURCHASE 1005 SALLY BEAUTY #1085 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1347506,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2025-10-06",
+      "amountCents": -9185,
+      "description": "FACEBK *EBKQV022GY",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 1338321
+    },
+    {
+      "date": "2025-10-07",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1355821
+    },
+    {
+      "date": "2025-10-08",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1403321,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2025-10-08",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1428321
+    },
+    {
+      "date": "2025-10-08",
+      "amountCents": -11277,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1417044
+    },
+    {
+      "date": "2025-10-10",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1444544
+    },
+    {
+      "date": "2025-10-13",
+      "amountCents": -9539,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1435005
+    },
+    {
+      "date": "2025-10-14",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1452505
+    },
+    {
+      "date": "2025-10-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1451065
+    },
+    {
+      "date": "2025-10-15",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1476065
+    },
+    {
+      "date": "2025-10-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 1452065
+    },
+    {
+      "date": "2025-10-17",
+      "amountCents": -6785,
+      "description": "POS DEBIT 1017 COSMOPROF 1187 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1445280,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2025-10-17",
+      "amountCents": -8500,
+      "description": "INTUIT *QBooks Online 800-446-8848 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1436780
+    },
+    {
+      "date": "2025-10-18",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1464280
+    },
+    {
+      "date": "2025-10-18",
+      "amountCents": -13685,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1450595
+    },
+    {
+      "date": "2025-10-18",
+      "amountCents": -6476,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1444119
+    },
+    {
+      "date": "2025-10-18",
+      "amountCents": -12115,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1432004
+    },
+    {
+      "date": "2025-10-19",
+      "amountCents": -6759,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1425245
+    },
+    {
+      "date": "2025-10-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1414255
+    },
+    {
+      "date": "2025-10-21",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1431755
+    },
+    {
+      "date": "2025-10-21",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1479255,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2025-10-21",
+      "amountCents": -15879,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1463376
+    },
+    {
+      "date": "2025-10-21",
+      "amountCents": -11142,
+      "description": "FACEBK *RRRQMLFTKU",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 1452234
+    },
+    {
+      "date": "2025-10-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04707-23063",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1450735
+    },
+    {
+      "date": "2025-10-23",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1475735
+    },
+    {
+      "date": "2025-10-25",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1503235
+    },
+    {
+      "date": "2025-10-25",
+      "amountCents": -17139,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 48932",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 1486096
+    },
+    {
+      "date": "2025-10-25",
+      "amountCents": -80000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 1406096
+    },
+    {
+      "date": "2025-10-28",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1423596
+    },
+    {
+      "date": "2025-10-29",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1448596
+    },
+    {
+      "date": "2025-10-31",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1476096
+    },
+    {
+      "date": "2025-10-31",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 1474596
+    },
+    {
+      "date": "2025-10-31",
+      "amountCents": 264,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 1474860
+    },
+    {
+      "date": "2025-11-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 1174860
+    },
+    {
+      "date": "2025-11-02",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 1279860,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2025-11-03",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1297360
+    },
+    {
+      "date": "2025-11-03",
+      "amountCents": -7063,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0470 CARMEL IN 110325",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1290297,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2025-11-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1287297
+    },
+    {
+      "date": "2025-11-04",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1334797,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2025-11-05",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1359797
+    },
+    {
+      "date": "2025-11-06",
+      "amountCents": -9273,
+      "description": "FACEBK *4UG88KT57Z",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 1350524
+    },
+    {
+      "date": "2025-11-08",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1378024
+    },
+    {
+      "date": "2025-11-11",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1395524
+    },
+    {
+      "date": "2025-11-12",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1420524
+    },
+    {
+      "date": "2025-11-12",
+      "amountCents": -12749,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1407775
+    },
+    {
+      "date": "2025-11-12",
+      "amountCents": -6522,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1401253
+    },
+    {
+      "date": "2025-11-13",
+      "amountCents": -8935,
+      "description": "POS PURCHASE 1113 SALLY BEAUTY #1821 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1392318,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2025-11-14",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1419818
+    },
+    {
+      "date": "2025-11-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1418378
+    },
+    {
+      "date": "2025-11-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 1394378
+    },
+    {
+      "date": "2025-11-16",
+      "amountCents": -3143,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1391235
+    },
+    {
+      "date": "2025-11-17",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1408735
+    },
+    {
+      "date": "2025-11-17",
+      "amountCents": -8500,
+      "description": "INTUIT *QBooks Online 800-446-8848 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1400235
+    },
+    {
+      "date": "2025-11-18",
+      "amountCents": -17415,
+      "description": "ACH DEBIT SALLY BEAUTY SUPPLY, LLC ONLINE ORDER",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1382820,
+      "trap": "comma-in-description"
+    },
+    {
+      "date": "2025-11-20",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1430320,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2025-11-20",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1455320
+    },
+    {
+      "date": "2025-11-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1444330
+    },
+    {
+      "date": "2025-11-21",
+      "amountCents": -11189,
+      "description": "AMAZON MKTPL*U3TGCDCJY AMZN.COM/BILL WA",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1433141
+    },
+    {
+      "date": "2025-11-21",
+      "amountCents": -11548,
+      "description": "FACEBK *3LS1UZUU89",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 1421593
+    },
+    {
+      "date": "2025-11-22",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1449093
+    },
+    {
+      "date": "2025-11-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04396-40405",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1447594
+    },
+    {
+      "date": "2025-11-25",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1465094
+    },
+    {
+      "date": "2025-11-25",
+      "amountCents": -17430,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 48044",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 1447664
+    },
+    {
+      "date": "2025-11-25",
+      "amountCents": -60000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 1387664
+    },
+    {
+      "date": "2025-11-26",
+      "amountCents": -2784,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1384880
+    },
+    {
+      "date": "2025-11-27",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1409880
+    },
+    {
+      "date": "2025-11-29",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1437380
+    },
+    {
+      "date": "2025-11-30",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 1435880
+    },
+    {
+      "date": "2025-11-30",
+      "amountCents": 330,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 1436210
+    },
+    {
+      "date": "2025-12-01",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1453710
+    },
+    {
+      "date": "2025-12-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 1153710
+    },
+    {
+      "date": "2025-12-02",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 1258710,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2025-12-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1255710
+    },
+    {
+      "date": "2025-12-04",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1303210,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2025-12-04",
+      "amountCents": 2500,
+      "description": "ANNUAL REWARDS CREDIT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 1305710,
+      "trap": "name-substring-annual"
+    },
+    {
+      "date": "2025-12-05",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1333210
+    },
+    {
+      "date": "2025-12-06",
+      "amountCents": -13824,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1319386
+    },
+    {
+      "date": "2025-12-06",
+      "amountCents": -8340,
+      "description": "FACEBK *DEN44ZCBKZ",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 1311046
+    },
+    {
+      "date": "2025-12-08",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1328546
+    },
+    {
+      "date": "2025-12-10",
+      "amountCents": -13526,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1315020
+    },
+    {
+      "date": "2025-12-11",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1340020,
+      "trap": "same-day-identical"
+    },
+    {
+      "date": "2025-12-11",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1365020,
+      "trap": "same-day-identical"
+    },
+    {
+      "date": "2025-12-12",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1392520
+    },
+    {
+      "date": "2025-12-12",
+      "amountCents": -6623,
+      "description": "POS DEBIT 1212 COSMOPROF 1183 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1385897,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2025-12-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1384457
+    },
+    {
+      "date": "2025-12-15",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1401957
+    },
+    {
+      "date": "2025-12-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 1377957
+    },
+    {
+      "date": "2025-12-16",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1425457,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2025-12-16",
+      "amountCents": -11688,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1413769
+    },
+    {
+      "date": "2025-12-16",
+      "amountCents": -8493,
+      "description": "POS PURCHASE 1216 SALLY BEAUTY #1499 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1405276,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2025-12-17",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1430276
+    },
+    {
+      "date": "2025-12-17",
+      "amountCents": -8500,
+      "description": "INTUIT *QBooks Online 800-446-8848 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1421776
+    },
+    {
+      "date": "2025-12-18",
+      "amountCents": -14122,
+      "description": "AMAZON MKTPL*FK8SKX210 AMZN.COM/BILL WA",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1407654
+    },
+    {
+      "date": "2025-12-20",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1435154
+    },
+    {
+      "date": "2025-12-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1424164
+    },
+    {
+      "date": "2025-12-21",
+      "amountCents": -9157,
+      "description": "FACEBK *5X66MDXJSK",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 1415007
+    },
+    {
+      "date": "2025-12-22",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1432507
+    },
+    {
+      "date": "2025-12-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04517-13898",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1431008
+    },
+    {
+      "date": "2025-12-24",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1456008
+    },
+    {
+      "date": "2025-12-24",
+      "amountCents": -6301,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1449707
+    },
+    {
+      "date": "2025-12-25",
+      "amountCents": -11389,
+      "description": "POS DEBIT 1225 COSMOPROF 1144 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1438318,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2025-12-25",
+      "amountCents": -16348,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 49434",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 1421970
+    },
+    {
+      "date": "2025-12-25",
+      "amountCents": -80000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 1341970
+    },
+    {
+      "date": "2025-12-27",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1369470
+    },
+    {
+      "date": "2025-12-29",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1386970
+    },
+    {
+      "date": "2025-12-30",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1434470,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2025-12-31",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 1432970
+    },
+    {
+      "date": "2025-12-31",
+      "amountCents": 178,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 1433148
+    },
+    {
+      "date": "2026-01-01",
+      "amountCents": 95000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 1528148,
+      "trap": "payer-llc+short-payment"
+    },
+    {
+      "date": "2026-01-01",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1553148
+    },
+    {
+      "date": "2026-01-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 1253148
+    },
+    {
+      "date": "2026-01-02",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1280648
+    },
+    {
+      "date": "2026-01-02",
+      "amountCents": -12233,
+      "description": "AMAZON MKTPL*NG2TEC2Q5 AMZN.COM/BILL WA",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1268415
+    },
+    {
+      "date": "2026-01-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1265415
+    },
+    {
+      "date": "2026-01-05",
+      "amountCents": -2634,
+      "description": "POS PURCHASE 0105 SALLY BEAUTY #1340 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1262781,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-01-06",
+      "amountCents": 17500,
+      "description": "VENMO DES:CASHOUT ID:ST-6C07K0GT3E9V INDN:EXAMPLE SALON COLLECTIVE CO ID:1453728806 CCD",
+      "memo": "",
+      "category": "Booth Rent",
+      "stylist": null,
+      "balanceCents": 1280281,
+      "trap": "venmo-cashout"
+    },
+    {
+      "date": "2026-01-06",
+      "amountCents": -8164,
+      "description": "FACEBK *UYH2JEYWUG",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 1272117
+    },
+    {
+      "date": "2026-01-08",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1297117
+    },
+    {
+      "date": "2026-01-08",
+      "amountCents": -5065,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1292052
+    },
+    {
+      "date": "2026-01-09",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1319552
+    },
+    {
+      "date": "2026-01-09",
+      "amountCents": 100000,
+      "description": "ONLINE BANKING TRANSFER FROM SAV 8847",
+      "memo": "",
+      "category": "Owner Contribution",
+      "stylist": null,
+      "balanceCents": 1419552
+    },
+    {
+      "date": "2026-01-13",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1437052
+    },
+    {
+      "date": "2026-01-13",
+      "amountCents": -13076,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1423976
+    },
+    {
+      "date": "2026-01-14",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1471476,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-01-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1470036
+    },
+    {
+      "date": "2026-01-15",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1495036
+    },
+    {
+      "date": "2026-01-15",
+      "amountCents": -10052,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1484984
+    },
+    {
+      "date": "2026-01-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 1460984
+    },
+    {
+      "date": "2026-01-15",
+      "amountCents": -80000,
+      "description": "IRS USATAXPYMT 270387649837",
+      "memo": "",
+      "category": "Taxes",
+      "stylist": null,
+      "balanceCents": 1380984
+    },
+    {
+      "date": "2026-01-16",
+      "amountCents": 4500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM JOANNE MERCER",
+      "category": "Product Sales",
+      "stylist": null,
+      "balanceCents": 1385484,
+      "trap": "name-substring-joanne"
+    },
+    {
+      "date": "2026-01-17",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1412984
+    },
+    {
+      "date": "2026-01-17",
+      "amountCents": -13728,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0464 CARMEL IN 011726",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1399256,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-01-17",
+      "amountCents": -8500,
+      "description": "INTUIT *QBooks Online 800-446-8848 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1390756
+    },
+    {
+      "date": "2026-01-19",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1408256
+    },
+    {
+      "date": "2026-01-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1397266
+    },
+    {
+      "date": "2026-01-21",
+      "amountCents": -14377,
+      "description": "FACEBK *T1B8VKBM01",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 1382889
+    },
+    {
+      "date": "2026-01-22",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1407889
+    },
+    {
+      "date": "2026-01-22",
+      "amountCents": -11585,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1396304
+    },
+    {
+      "date": "2026-01-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04951-25787",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1394805
+    },
+    {
+      "date": "2026-01-24",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1422305
+    },
+    {
+      "date": "2026-01-25",
+      "amountCents": -16877,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 48987",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 1405428
+    },
+    {
+      "date": "2026-01-25",
+      "amountCents": -60000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 1345428
+    },
+    {
+      "date": "2026-01-27",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1362928
+    },
+    {
+      "date": "2026-01-27",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1410428,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-01-28",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1435428
+    },
+    {
+      "date": "2026-01-31",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1462928
+    },
+    {
+      "date": "2026-01-31",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 1461428
+    },
+    {
+      "date": "2026-01-31",
+      "amountCents": 175,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 1461603
+    },
+    {
+      "date": "2026-02-01",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 1566603,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2026-02-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 1266603
+    },
+    {
+      "date": "2026-02-02",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1284103
+    },
+    {
+      "date": "2026-02-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1281103
+    },
+    {
+      "date": "2026-02-04",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1306103
+    },
+    {
+      "date": "2026-02-06",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1333603
+    },
+    {
+      "date": "2026-02-06",
+      "amountCents": -11032,
+      "description": "FACEBK *BYC61Y3BVU",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 1322571
+    },
+    {
+      "date": "2026-02-07",
+      "amountCents": -8496,
+      "description": "POS DEBIT 0207 COSMOPROF 1161 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1314075,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-02-10",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1331575
+    },
+    {
+      "date": "2026-02-10",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1379075,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-02-10",
+      "amountCents": -286000,
+      "description": "DEBIT CARD PURCHASE SALON INTERIORS OF INDY INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Equipment & Furniture",
+      "stylist": null,
+      "balanceCents": 1093075
+    },
+    {
+      "date": "2026-02-11",
+      "amountCents": -11730,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1081345
+    },
+    {
+      "date": "2026-02-12",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1106345
+    },
+    {
+      "date": "2026-02-13",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1133845
+    },
+    {
+      "date": "2026-02-14",
+      "amountCents": -11375,
+      "description": "POS PURCHASE 0214 SALLY BEAUTY #1979 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1122470,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-02-14",
+      "amountCents": -9522,
+      "description": "ACH DEBIT SALLY BEAUTY SUPPLY, LLC ONLINE ORDER",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1112948,
+      "trap": "comma-in-description"
+    },
+    {
+      "date": "2026-02-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1111508
+    },
+    {
+      "date": "2026-02-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 1087508
+    },
+    {
+      "date": "2026-02-16",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1105008
+    },
+    {
+      "date": "2026-02-16",
+      "amountCents": -9545,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1095463
+    },
+    {
+      "date": "2026-02-17",
+      "amountCents": -8500,
+      "description": "INTUIT *QBooks Online 800-446-8848 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1086963
+    },
+    {
+      "date": "2026-02-19",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1111963
+    },
+    {
+      "date": "2026-02-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 1100973
+    },
+    {
+      "date": "2026-02-21",
+      "amountCents": -8133,
+      "description": "POS DEBIT 0221 COSMOPROF 1125 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1092840,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-02-21",
+      "amountCents": -10853,
+      "description": "FACEBK *TSRVA0AZGN",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 1081987
+    },
+    {
+      "date": "2026-02-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04426-32638",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 1080488
+    },
+    {
+      "date": "2026-02-23",
+      "amountCents": -6717,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0451 CARMEL IN 022326",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1073771,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-02-24",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 1091271
+    },
+    {
+      "date": "2026-02-24",
+      "amountCents": -3042,
+      "description": "POS PURCHASE 0224 SALLY BEAUTY #1994 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 1088229,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-02-25",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 1113229
+    },
+    {
+      "date": "2026-02-25",
+      "amountCents": -17085,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 48727",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 1096144
+    },
+    {
+      "date": "2026-02-25",
+      "amountCents": -80000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 1016144
+    },
+    {
+      "date": "2026-02-26",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 1063644,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-02-28",
+      "amountCents": 55000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 1118644,
+      "trap": "missed-week-then-double"
+    },
+    {
+      "date": "2026-02-28",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 1117144
+    },
+    {
+      "date": "2026-02-28",
+      "amountCents": 318,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 1117462
+    },
+    {
+      "date": "2026-03-01",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 1222462,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2026-03-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 922462
+    },
+    {
+      "date": "2026-03-02",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 939962
+    },
+    {
+      "date": "2026-03-03",
+      "amountCents": -9858,
+      "description": "POS DEBIT 0303 COSMOPROF 1144 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 930104,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-03-03",
+      "amountCents": -9128,
+      "description": "POS DEBIT 0303 COSMOPROF 1168 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 920976,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-03-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 917976
+    },
+    {
+      "date": "2026-03-04",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 942976
+    },
+    {
+      "date": "2026-03-05",
+      "amountCents": -138600,
+      "description": "HISCOX INC LIABILITY INS PREMIUM",
+      "memo": "",
+      "category": "Insurance",
+      "stylist": null,
+      "balanceCents": 804376
+    },
+    {
+      "date": "2026-03-06",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 831876
+    },
+    {
+      "date": "2026-03-06",
+      "amountCents": -13494,
+      "description": "FACEBK *83FD9BS5Z2",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 818382
+    },
+    {
+      "date": "2026-03-09",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 835882
+    },
+    {
+      "date": "2026-03-11",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 883382,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-03-12",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 908382
+    },
+    {
+      "date": "2026-03-14",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 935882
+    },
+    {
+      "date": "2026-03-14",
+      "amountCents": -12116,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 923766
+    },
+    {
+      "date": "2026-03-14",
+      "amountCents": -12504,
+      "description": "POS PURCHASE 0314 SALLY BEAUTY #1714 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 911262,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-03-14",
+      "amountCents": -1917,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 909345
+    },
+    {
+      "date": "2026-03-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 907905
+    },
+    {
+      "date": "2026-03-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 883905
+    },
+    {
+      "date": "2026-03-16",
+      "amountCents": -11916,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 871989
+    },
+    {
+      "date": "2026-03-16",
+      "amountCents": -10464,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 861525
+    },
+    {
+      "date": "2026-03-17",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 879025
+    },
+    {
+      "date": "2026-03-17",
+      "amountCents": -15228,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 863797
+    },
+    {
+      "date": "2026-03-17",
+      "amountCents": -8500,
+      "description": "INTUIT *QBooks Online 800-446-8848 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 855297,
+      "trap": "subscription-cancelled-after-this"
+    },
+    {
+      "date": "2026-03-19",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 880297
+    },
+    {
+      "date": "2026-03-20",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 907797
+    },
+    {
+      "date": "2026-03-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 896807
+    },
+    {
+      "date": "2026-03-21",
+      "amountCents": -9621,
+      "description": "FACEBK *4R7YJFN0BE",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 887186
+    },
+    {
+      "date": "2026-03-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04979-97041",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 885687
+    },
+    {
+      "date": "2026-03-24",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 903187
+    },
+    {
+      "date": "2026-03-25",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 928187
+    },
+    {
+      "date": "2026-03-25",
+      "amountCents": -16493,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 49968",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 911694
+    },
+    {
+      "date": "2026-03-25",
+      "amountCents": -60000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 851694
+    },
+    {
+      "date": "2026-03-26",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 899194,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-03-27",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 926694
+    },
+    {
+      "date": "2026-03-31",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 944194
+    },
+    {
+      "date": "2026-03-31",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 942694
+    },
+    {
+      "date": "2026-03-31",
+      "amountCents": 172,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 942866
+    },
+    {
+      "date": "2026-04-01",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 1047866,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2026-04-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 747866
+    },
+    {
+      "date": "2026-04-02",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 772866
+    },
+    {
+      "date": "2026-04-03",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 800366
+    },
+    {
+      "date": "2026-04-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 797366
+    },
+    {
+      "date": "2026-04-06",
+      "amountCents": -14813,
+      "description": "FACEBK *GZ0VUX62AC",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 782553
+    },
+    {
+      "date": "2026-04-07",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 800053
+    },
+    {
+      "date": "2026-04-07",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 847553,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-04-09",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 872553
+    },
+    {
+      "date": "2026-04-10",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 900053
+    },
+    {
+      "date": "2026-04-12",
+      "amountCents": -12497,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 887556
+    },
+    {
+      "date": "2026-04-12",
+      "amountCents": 3499,
+      "description": "POS RETURN 0412 SALLY BEAUTY #1234 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 891055,
+      "trap": "supply-refund"
+    },
+    {
+      "date": "2026-04-13",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 908555
+    },
+    {
+      "date": "2026-04-14",
+      "amountCents": -7215,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 901340
+    },
+    {
+      "date": "2026-04-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 899900
+    },
+    {
+      "date": "2026-04-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 875900
+    },
+    {
+      "date": "2026-04-15",
+      "amountCents": -80000,
+      "description": "IRS USATAXPYMT 270327842522",
+      "memo": "",
+      "category": "Taxes",
+      "stylist": null,
+      "balanceCents": 795900
+    },
+    {
+      "date": "2026-04-16",
+      "amountCents": 25000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MONIQUE DALE",
+      "category": "Booth Rent",
+      "stylist": "Monique Dale",
+      "balanceCents": 820900,
+      "trap": "stylist-leaves"
+    },
+    {
+      "date": "2026-04-16",
+      "amountCents": -12347,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 808553
+    },
+    {
+      "date": "2026-04-18",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 836053
+    },
+    {
+      "date": "2026-04-18",
+      "amountCents": -6274,
+      "description": "POS DEBIT 0418 COSMOPROF 1152 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 829779,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-04-18",
+      "amountCents": -13096,
+      "description": "POS DEBIT 0418 COSMOPROF 1159 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 816683,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-04-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 805693
+    },
+    {
+      "date": "2026-04-21",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 823193
+    },
+    {
+      "date": "2026-04-21",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 870693,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-04-21",
+      "amountCents": -7764,
+      "description": "FACEBK *6ABTB1XAP4",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 862929
+    },
+    {
+      "date": "2026-04-22",
+      "amountCents": -12301,
+      "description": "POS PURCHASE 0422 SALLY BEAUTY #1684 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 850628,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-04-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04588-25212",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 849129
+    },
+    {
+      "date": "2026-04-24",
+      "amountCents": -5412,
+      "description": "POS DEBIT 0424 COSMOPROF 1189 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 843717,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-04-25",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 871217
+    },
+    {
+      "date": "2026-04-25",
+      "amountCents": -17005,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 48783",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 854212
+    },
+    {
+      "date": "2026-04-25",
+      "amountCents": -80000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 774212
+    },
+    {
+      "date": "2026-04-27",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 791712
+    },
+    {
+      "date": "2026-04-27",
+      "amountCents": -4252,
+      "description": "POS DEBIT 0427 COSMOPROF 1107 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 787460,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-04-30",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 785960
+    },
+    {
+      "date": "2026-04-30",
+      "amountCents": 204,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 786164
+    },
+    {
+      "date": "2026-05-01",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 813664
+    },
+    {
+      "date": "2026-05-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 513664
+    },
+    {
+      "date": "2026-05-03",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 618664,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2026-05-03",
+      "amountCents": 90000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM JORDAN PIKE",
+      "category": "Booth Rent",
+      "stylist": "Jordan Pike",
+      "balanceCents": 708664,
+      "trap": "stylist-starts"
+    },
+    {
+      "date": "2026-05-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 705664
+    },
+    {
+      "date": "2026-05-04",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 723164
+    },
+    {
+      "date": "2026-05-06",
+      "amountCents": 42500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 765664,
+      "trap": "payer-differs-from-name+short-payment"
+    },
+    {
+      "date": "2026-05-06",
+      "amountCents": -11828,
+      "description": "FACEBK *9J8H8LTPHK",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 753836
+    },
+    {
+      "date": "2026-05-08",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 781336
+    },
+    {
+      "date": "2026-05-11",
+      "amountCents": -23740,
+      "description": "ACH DEBIT SALLY BEAUTY SUPPLY, LLC ONLINE ORDER",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 757596,
+      "trap": "comma-in-description"
+    },
+    {
+      "date": "2026-05-12",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 775096
+    },
+    {
+      "date": "2026-05-12",
+      "amountCents": -10257,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 764839
+    },
+    {
+      "date": "2026-05-12",
+      "amountCents": -10184,
+      "description": "POS PURCHASE 0512 SALLY BEAUTY #1135 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 754655,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-05-13",
+      "amountCents": -13611,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 741044
+    },
+    {
+      "date": "2026-05-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 739604
+    },
+    {
+      "date": "2026-05-15",
+      "amountCents": -14829,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0415 CARMEL IN 051526",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 724775,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-05-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 700775
+    },
+    {
+      "date": "2026-05-16",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 728275
+    },
+    {
+      "date": "2026-05-18",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 745775
+    },
+    {
+      "date": "2026-05-19",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 793275,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-05-19",
+      "amountCents": -15700,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 777575
+    },
+    {
+      "date": "2026-05-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 766585
+    },
+    {
+      "date": "2026-05-20",
+      "amountCents": -12203,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0492 CARMEL IN 052026",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 754382,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-05-20",
+      "amountCents": -6675,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 747707
+    },
+    {
+      "date": "2026-05-21",
+      "amountCents": -14555,
+      "description": "FACEBK *XLTNRFV6YU",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 733152
+    },
+    {
+      "date": "2026-05-22",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 760652
+    },
+    {
+      "date": "2026-05-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04021-68661",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 759153
+    },
+    {
+      "date": "2026-05-24",
+      "amountCents": -10037,
+      "description": "POS DEBIT 0524 COSMOPROF 1158 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 749116,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-05-25",
+      "amountCents": -16017,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 49951",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 733099
+    },
+    {
+      "date": "2026-05-25",
+      "amountCents": -60000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 673099
+    },
+    {
+      "date": "2026-05-26",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 690599
+    },
+    {
+      "date": "2026-05-26",
+      "amountCents": -7920,
+      "description": "POS DEBIT 0526 COSMOPROF 1133 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 682679,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-05-30",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 710179
+    },
+    {
+      "date": "2026-05-31",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 708679
+    },
+    {
+      "date": "2026-05-31",
+      "amountCents": 367,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 709046
+    },
+    {
+      "date": "2026-06-01",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 814046,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2026-06-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 514046
+    },
+    {
+      "date": "2026-06-02",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 531546
+    },
+    {
+      "date": "2026-06-03",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 579046,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-06-03",
+      "amountCents": 90000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM JORDAN PIKE",
+      "category": "Booth Rent",
+      "stylist": "Jordan Pike",
+      "balanceCents": 669046
+    },
+    {
+      "date": "2026-06-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 666046
+    },
+    {
+      "date": "2026-06-05",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 693546
+    },
+    {
+      "date": "2026-06-05",
+      "amountCents": -11859,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0427 CARMEL IN 060526",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 681687,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-06-06",
+      "amountCents": -11897,
+      "description": "FACEBK *17PNF6VFB5",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 669790
+    },
+    {
+      "date": "2026-06-08",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 687290
+    },
+    {
+      "date": "2026-06-09",
+      "amountCents": -2410,
+      "description": "POS DEBIT 0609 COSMOPROF 1169 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 684880,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-06-09",
+      "amountCents": 100000,
+      "description": "ONLINE BANKING TRANSFER FROM SAV 8847",
+      "memo": "",
+      "category": "Owner Contribution",
+      "stylist": null,
+      "balanceCents": 784880
+    },
+    {
+      "date": "2026-06-10",
+      "amountCents": -14363,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 770517
+    },
+    {
+      "date": "2026-06-11",
+      "amountCents": 150000,
+      "description": "ONLINE TRANSFER FROM SHANNON KELLER SAVINGS",
+      "memo": "",
+      "category": "Owner Contribution",
+      "stylist": null,
+      "balanceCents": 920517,
+      "trap": "name-substring-shannon"
+    },
+    {
+      "date": "2026-06-12",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 948017
+    },
+    {
+      "date": "2026-06-12",
+      "amountCents": -23417,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 924600
+    },
+    {
+      "date": "2026-06-14",
+      "amountCents": -13386,
+      "description": "POS PURCHASE 0614 SALLY BEAUTY #1199 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 911214,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-06-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 909774
+    },
+    {
+      "date": "2026-06-15",
+      "amountCents": 17500,
+      "description": "VENMO DES:CASHOUT ID:ST-3E9G0ZHQFYMH INDN:EXAMPLE SALON COLLECTIVE CO ID:1453728806 CCD",
+      "memo": "",
+      "category": "Booth Rent",
+      "stylist": null,
+      "balanceCents": 927274,
+      "trap": "venmo-cashout"
+    },
+    {
+      "date": "2026-06-15",
+      "amountCents": -10286,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 916988
+    },
+    {
+      "date": "2026-06-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 892988
+    },
+    {
+      "date": "2026-06-15",
+      "amountCents": -80000,
+      "description": "IRS USATAXPYMT 270392810803",
+      "memo": "",
+      "category": "Taxes",
+      "stylist": null,
+      "balanceCents": 812988
+    },
+    {
+      "date": "2026-06-17",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 860488,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-06-17",
+      "amountCents": -11176,
+      "description": "AMAZON MKTPL*PFA0NMAEY AMZN.COM/BILL WA",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 849312
+    },
+    {
+      "date": "2026-06-18",
+      "amountCents": -6631,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0461 CARMEL IN 061826",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 842681,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-06-19",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 870181
+    },
+    {
+      "date": "2026-06-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 859191
+    },
+    {
+      "date": "2026-06-21",
+      "amountCents": -7760,
+      "description": "FACEBK *UTW9TYT66C",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 851431
+    },
+    {
+      "date": "2026-06-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04174-69521",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 849932
+    },
+    {
+      "date": "2026-06-23",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 867432
+    },
+    {
+      "date": "2026-06-25",
+      "amountCents": -17359,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 48931",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 850073
+    },
+    {
+      "date": "2026-06-25",
+      "amountCents": -80000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 770073
+    },
+    {
+      "date": "2026-06-26",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 797573
+    },
+    {
+      "date": "2026-06-30",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 815073
+    },
+    {
+      "date": "2026-06-30",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 813573
+    },
+    {
+      "date": "2026-06-30",
+      "amountCents": 167,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 813740
+    },
+    {
+      "date": "2026-07-01",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 861240,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-07-01",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 966240,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2026-07-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 666240
+    },
+    {
+      "date": "2026-07-03",
+      "amountCents": 90000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM JORDAN PIKE",
+      "category": "Booth Rent",
+      "stylist": "Jordan Pike",
+      "balanceCents": 756240
+    },
+    {
+      "date": "2026-07-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 753240
+    },
+    {
+      "date": "2026-07-04",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 780740
+    },
+    {
+      "date": "2026-07-06",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 798240
+    },
+    {
+      "date": "2026-07-06",
+      "amountCents": -2486,
+      "description": "POS PURCHASE 0706 SALLY BEAUTY #1338 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 795754,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-07-06",
+      "amountCents": -14587,
+      "description": "FACEBK *B1VCX5G4H9",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 781167
+    },
+    {
+      "date": "2026-07-10",
+      "amountCents": -22813,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 758354
+    },
+    {
+      "date": "2026-07-11",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 785854
+    },
+    {
+      "date": "2026-07-11",
+      "amountCents": -6572,
+      "description": "AMAZON MKTPL*55JWST0VP AMZN.COM/BILL WA",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 779282
+    },
+    {
+      "date": "2026-07-14",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 796782
+    },
+    {
+      "date": "2026-07-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 795342
+    },
+    {
+      "date": "2026-07-15",
+      "amountCents": -9144,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 786198
+    },
+    {
+      "date": "2026-07-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 762198
+    },
+    {
+      "date": "2026-07-16",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 809698,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-07-17",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 837198
+    },
+    {
+      "date": "2026-07-20",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 854698
+    },
+    {
+      "date": "2026-07-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 843708
+    },
+    {
+      "date": "2026-07-21",
+      "amountCents": -9283,
+      "description": "POS DEBIT 0721 COSMOPROF 1137 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 834425,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-07-21",
+      "amountCents": -5939,
+      "description": "POS DEBIT 0721 COSMOPROF 1126 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 828486,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-07-21",
+      "amountCents": -10608,
+      "description": "FACEBK *QAPBPSPA82",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 817878
+    },
+    {
+      "date": "2026-07-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04377-20615",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 816379
+    },
+    {
+      "date": "2026-07-25",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 843879
+    },
+    {
+      "date": "2026-07-25",
+      "amountCents": -14838,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 49688",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 829041
+    },
+    {
+      "date": "2026-07-25",
+      "amountCents": -60000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 769041
+    },
+    {
+      "date": "2026-07-27",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 786541
+    },
+    {
+      "date": "2026-07-27",
+      "amountCents": -4948,
+      "description": "POS DEBIT 0727 COSMOPROF 1104 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 781593,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-07-27",
+      "amountCents": -12109,
+      "description": "POS DEBIT 0727 COSMOPROF 1134 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 769484,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-07-29",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 816984,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-07-31",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 844484
+    },
+    {
+      "date": "2026-07-31",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 842984
+    },
+    {
+      "date": "2026-07-31",
+      "amountCents": 169,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 843153
+    },
+    {
+      "date": "2026-08-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 543153
+    },
+    {
+      "date": "2026-08-03",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 648153,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2026-08-03",
+      "amountCents": 90000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM JORDAN PIKE",
+      "category": "Booth Rent",
+      "stylist": "Jordan Pike",
+      "balanceCents": 738153
+    },
+    {
+      "date": "2026-08-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 735153
+    },
+    {
+      "date": "2026-08-04",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 752653
+    },
+    {
+      "date": "2026-08-06",
+      "amountCents": -9697,
+      "description": "FACEBK *882FNKCXUW",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 742956
+    },
+    {
+      "date": "2026-08-07",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 770456
+    },
+    {
+      "date": "2026-08-07",
+      "amountCents": -3723,
+      "description": "POS PURCHASE 0807 SALLY BEAUTY #1953 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 766733,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-08-07",
+      "amountCents": -9263,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0407 CARMEL IN 080726",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 757470,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-08-08",
+      "amountCents": -20760,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 736710
+    },
+    {
+      "date": "2026-08-09",
+      "amountCents": -14583,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 722127
+    },
+    {
+      "date": "2026-08-10",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 739627
+    },
+    {
+      "date": "2026-08-12",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 787127,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-08-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 785687
+    },
+    {
+      "date": "2026-08-15",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 813187
+    },
+    {
+      "date": "2026-08-15",
+      "amountCents": -13484,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0400 CARMEL IN 081526",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 799703,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-08-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 775703
+    },
+    {
+      "date": "2026-08-16",
+      "amountCents": -11257,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 764446
+    },
+    {
+      "date": "2026-08-16",
+      "amountCents": -12083,
+      "description": "ACH DEBIT SALLY BEAUTY SUPPLY, LLC ONLINE ORDER",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 752363,
+      "trap": "comma-in-description"
+    },
+    {
+      "date": "2026-08-17",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 769863
+    },
+    {
+      "date": "2026-08-19",
+      "amountCents": -10789,
+      "description": "POS PURCHASE 0819 SALLY BEAUTY #1634 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 759074,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-08-19",
+      "amountCents": -13070,
+      "description": "POS PURCHASE 0819 SALLY BEAUTY #1847 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 746004,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-08-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 735014
+    },
+    {
+      "date": "2026-08-21",
+      "amountCents": -12265,
+      "description": "FACEBK *WC6ZXQ3HQD",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 722749
+    },
+    {
+      "date": "2026-08-22",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 750249
+    },
+    {
+      "date": "2026-08-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04039-93355",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 748750
+    },
+    {
+      "date": "2026-08-23",
+      "amountCents": -14695,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 734055
+    },
+    {
+      "date": "2026-08-24",
+      "amountCents": -14401,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0470 CARMEL IN 082426",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 719654,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-08-25",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 737154
+    },
+    {
+      "date": "2026-08-25",
+      "amountCents": -14601,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 49620",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 722553
+    },
+    {
+      "date": "2026-08-25",
+      "amountCents": -80000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 642553
+    },
+    {
+      "date": "2026-08-27",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 690053,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-08-29",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 717553
+    },
+    {
+      "date": "2026-08-31",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 716053
+    },
+    {
+      "date": "2026-08-31",
+      "amountCents": 382,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 716435
+    },
+    {
+      "date": "2026-09-01",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 733935
+    },
+    {
+      "date": "2026-09-01",
+      "amountCents": 105000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM TG BEAUTY LLC",
+      "category": "Booth Rent",
+      "stylist": "Tasha Greer",
+      "balanceCents": 838935,
+      "trap": "payer-llc"
+    },
+    {
+      "date": "2026-09-01",
+      "amountCents": -300000,
+      "description": "ACH DEBIT MERIDIAN PROPERTY GROUP RENT",
+      "memo": "",
+      "category": "Rent & Lease",
+      "stylist": null,
+      "balanceCents": 538935
+    },
+    {
+      "date": "2026-09-03",
+      "amountCents": 90000,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM JORDAN PIKE",
+      "category": "Booth Rent",
+      "stylist": "Jordan Pike",
+      "balanceCents": 628935
+    },
+    {
+      "date": "2026-09-03",
+      "amountCents": -3000,
+      "description": "VAGARO*SALON SOFTWARE 855-555-0142 CA",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 625935
+    },
+    {
+      "date": "2026-09-04",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 653435
+    },
+    {
+      "date": "2026-09-06",
+      "amountCents": -7306,
+      "description": "FACEBK *3D0URMXWL2",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 646129
+    },
+    {
+      "date": "2026-09-08",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 663629
+    },
+    {
+      "date": "2026-09-08",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 711129,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-09-08",
+      "amountCents": -7027,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0420 CARMEL IN 090826",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 704102,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-09-09",
+      "amountCents": -11923,
+      "description": "AES INDIANA UTILITY PMT",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 692179
+    },
+    {
+      "date": "2026-09-09",
+      "amountCents": -8803,
+      "description": "AMAZON MKTPL*M0N8C81RL AMZN.COM/BILL WA",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 683376
+    },
+    {
+      "date": "2026-09-11",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 710876
+    },
+    {
+      "date": "2026-09-12",
+      "amountCents": -4564,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 706312
+    },
+    {
+      "date": "2026-09-13",
+      "amountCents": -7555,
+      "description": "DEBIT CARD PURCHASE SALONCENTRIC #0442 CARMEL IN 091326",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 698757,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-09-14",
+      "amountCents": -1440,
+      "description": "GOOGLE *WORKSPACE EXAMPLESALON.COM",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 697317
+    },
+    {
+      "date": "2026-09-15",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 714817
+    },
+    {
+      "date": "2026-09-15",
+      "amountCents": -24000,
+      "description": "ZELLE PAYMENT SENT",
+      "memo": "TO BRIGHT SIDE CLEANING",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 690817
+    },
+    {
+      "date": "2026-09-15",
+      "amountCents": -80000,
+      "description": "IRS USATAXPYMT 270341891215",
+      "memo": "",
+      "category": "Taxes",
+      "stylist": null,
+      "balanceCents": 610817
+    },
+    {
+      "date": "2026-09-16",
+      "amountCents": -10153,
+      "description": "CITIZENS ENERGY GROUP GAS WATER",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 600664
+    },
+    {
+      "date": "2026-09-18",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 628164
+    },
+    {
+      "date": "2026-09-20",
+      "amountCents": -10990,
+      "description": "COMCAST BUSINESS INTERNET",
+      "memo": "",
+      "category": "Utilities",
+      "stylist": null,
+      "balanceCents": 617174
+    },
+    {
+      "date": "2026-09-20",
+      "amountCents": -2944,
+      "description": "AMAZON MKTPL*YY55S2ERY AMZN.COM/BILL WA",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 614230
+    },
+    {
+      "date": "2026-09-21",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 631730
+    },
+    {
+      "date": "2026-09-21",
+      "amountCents": -13981,
+      "description": "FACEBK *1YSNW9LPPK",
+      "memo": "",
+      "category": "Marketing & Advertising",
+      "stylist": null,
+      "balanceCents": 617749
+    },
+    {
+      "date": "2026-09-22",
+      "amountCents": -1499,
+      "description": "CANVA* I04155-33157",
+      "memo": "",
+      "category": "Software & Subscriptions",
+      "stylist": null,
+      "balanceCents": 616250
+    },
+    {
+      "date": "2026-09-23",
+      "amountCents": 47500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM MARCUS ORTIZ",
+      "category": "Booth Rent",
+      "stylist": "Kelsey Ortiz",
+      "balanceCents": 663750,
+      "trap": "payer-differs-from-name"
+    },
+    {
+      "date": "2026-09-25",
+      "amountCents": 27500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM ANN WHITAKER",
+      "category": "Booth Rent",
+      "stylist": "Ann",
+      "balanceCents": 691250
+    },
+    {
+      "date": "2026-09-25",
+      "amountCents": -7942,
+      "description": "COSTCO WHSE #0653 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 683308
+    },
+    {
+      "date": "2026-09-25",
+      "amountCents": -3174,
+      "description": "POS DEBIT 0925 COSMOPROF 1186 INDIANAPOLIS IN",
+      "memo": "",
+      "category": "Supplies",
+      "stylist": null,
+      "balanceCents": 680134,
+      "trap": "pos-ref-between-words"
+    },
+    {
+      "date": "2026-09-25",
+      "amountCents": -14588,
+      "description": "ACH DEBIT METRO LINEN SERVICE INV 49418",
+      "memo": "",
+      "category": "Cleaning & Laundry",
+      "stylist": null,
+      "balanceCents": 665546
+    },
+    {
+      "date": "2026-09-25",
+      "amountCents": -60000,
+      "description": "ONLINE BANKING TRANSFER TO SAV 8847",
+      "memo": "",
+      "category": "Owner Draw",
+      "stylist": null,
+      "balanceCents": 605546
+    },
+    {
+      "date": "2026-09-29",
+      "amountCents": 17500,
+      "description": "ZELLE PAYMENT RECEIVED",
+      "memo": "FROM DANA FISK",
+      "category": "Booth Rent",
+      "stylist": "Dana Fisk",
+      "balanceCents": 623046
+    },
+    {
+      "date": "2026-09-30",
+      "amountCents": -1500,
+      "description": "MONTHLY MAINTENANCE FEE",
+      "memo": "",
+      "category": "Bank & Payment Fees",
+      "stylist": null,
+      "balanceCents": 621546
+    },
+    {
+      "date": "2026-09-30",
+      "amountCents": 304,
+      "description": "INTEREST PAYMENT",
+      "memo": "",
+      "category": "Other Income",
+      "stylist": null,
+      "balanceCents": 621850
+    }
+  ],
+  "roster": [
+    {
+      "name": "Ann",
+      "matchText": null,
+      "cadence": "weekly",
+      "rentCents": 27500,
+      "startDate": "2025-10-03",
+      "endDate": null,
+      "chairLabel": "Chair 1"
+    },
+    {
+      "name": "Dana Fisk",
+      "matchText": null,
+      "cadence": "weekly",
+      "rentCents": 17500,
+      "startDate": "2025-10-06",
+      "endDate": null,
+      "chairLabel": "Chair 5"
+    },
+    {
+      "name": "Kelsey Ortiz",
+      "matchText": "MARCUS ORTIZ, KELSEY ORTIZ",
+      "cadence": "biweekly",
+      "rentCents": 47500,
+      "startDate": "2025-10-07",
+      "endDate": null,
+      "chairLabel": "Chair 2"
+    },
+    {
+      "name": "Tasha Greer",
+      "matchText": "TG BEAUTY",
+      "cadence": "monthly",
+      "rentCents": 105000,
+      "startDate": "2025-10-01",
+      "endDate": null,
+      "chairLabel": "Chair 3"
+    },
+    {
+      "name": "Monique Dale",
+      "matchText": null,
+      "cadence": "weekly",
+      "rentCents": 25000,
+      "startDate": "2025-10-01",
+      "endDate": "2026-04-20",
+      "chairLabel": "Chair 4"
+    },
+    {
+      "name": "Jordan Pike",
+      "matchText": null,
+      "cadence": "monthly",
+      "rentCents": 90000,
+      "startDate": "2026-05-03",
+      "endDate": null,
+      "chairLabel": "Chair 4"
+    }
+  ],
+  "totalChairs": 5,
+  "openingBalance": {
+    "cents": 1500000,
+    "asOf": "2025-10-01"
+  },
+  "months": [
+    {
+      "month": "2025-10",
+      "incomeCents": 532764,
+      "expenseCents": 477904,
+      "netCents": 54860,
+      "boothRentByStylist": {
+        "Monique Dale": 125000,
+        "Tasha Greer": 105000,
+        "Ann": 137500,
+        "Dana Fisk": 70000,
+        "Kelsey Ortiz": 95000
+      }
+    },
+    {
+      "month": "2025-11",
+      "incomeCents": 480330,
+      "expenseCents": 458980,
+      "netCents": 21350,
+      "boothRentByStylist": {
+        "Tasha Greer": 105000,
+        "Dana Fisk": 70000,
+        "Kelsey Ortiz": 95000,
+        "Monique Dale": 100000,
+        "Ann": 110000
+      }
+    },
+    {
+      "month": "2025-12",
+      "incomeCents": 547678,
+      "expenseCents": 470740,
+      "netCents": 76938,
+      "boothRentByStylist": {
+        "Dana Fisk": 87500,
+        "Tasha Greer": 105000,
+        "Kelsey Ortiz": 142500,
+        "Ann": 110000,
+        "Monique Dale": 100000
+      }
+    },
+    {
+      "month": "2026-01",
+      "incomeCents": 527175,
+      "expenseCents": 538720,
+      "netCents": -11545,
+      "boothRentByStylist": {
+        "Tasha Greer": 95000,
+        "Monique Dale": 125000,
+        "Ann": 137500,
+        "Dana Fisk": 52500,
+        "Kelsey Ortiz": 95000
+      }
+    },
+    {
+      "month": "2026-02",
+      "incomeCents": 480318,
+      "expenseCents": 744459,
+      "netCents": -264141,
+      "boothRentByStylist": {
+        "Tasha Greer": 105000,
+        "Dana Fisk": 70000,
+        "Monique Dale": 100000,
+        "Ann": 110000,
+        "Kelsey Ortiz": 95000
+      }
+    },
+    {
+      "month": "2026-03",
+      "incomeCents": 497672,
+      "expenseCents": 612268,
+      "netCents": -114596,
+      "boothRentByStylist": {
+        "Tasha Greer": 105000,
+        "Dana Fisk": 87500,
+        "Monique Dale": 100000,
+        "Ann": 110000,
+        "Kelsey Ortiz": 95000
+      }
+    },
+    {
+      "month": "2026-04",
+      "incomeCents": 455204,
+      "expenseCents": 531906,
+      "netCents": -76702,
+      "boothRentByStylist": {
+        "Tasha Greer": 105000,
+        "Monique Dale": 75000,
+        "Ann": 110000,
+        "Dana Fisk": 70000,
+        "Kelsey Ortiz": 95000
+      }
+    },
+    {
+      "month": "2026-05",
+      "incomeCents": 492867,
+      "expenseCents": 509985,
+      "netCents": -17118,
+      "boothRentByStylist": {
+        "Ann": 137500,
+        "Tasha Greer": 105000,
+        "Jordan Pike": 90000,
+        "Dana Fisk": 70000,
+        "Kelsey Ortiz": 90000
+      }
+    },
+    {
+      "month": "2026-06",
+      "incomeCents": 487667,
+      "expenseCents": 552973,
+      "netCents": -65306,
+      "boothRentByStylist": {
+        "Tasha Greer": 105000,
+        "Dana Fisk": 70000,
+        "Kelsey Ortiz": 95000,
+        "Jordan Pike": 90000,
+        "Ann": 110000
+      }
+    },
+    {
+      "month": "2026-07",
+      "incomeCents": 545169,
+      "expenseCents": 455756,
+      "netCents": 89413,
+      "boothRentByStylist": {
+        "Kelsey Ortiz": 142500,
+        "Tasha Greer": 105000,
+        "Jordan Pike": 90000,
+        "Ann": 137500,
+        "Dana Fisk": 70000
+      }
+    },
+    {
+      "month": "2026-08",
+      "incomeCents": 470382,
+      "expenseCents": 517100,
+      "netCents": -46718,
+      "boothRentByStylist": {
+        "Tasha Greer": 105000,
+        "Jordan Pike": 90000,
+        "Dana Fisk": 70000,
+        "Ann": 110000,
+        "Kelsey Ortiz": 95000
+      }
+    },
+    {
+      "month": "2026-09",
+      "incomeCents": 487804,
+      "expenseCents": 522389,
+      "netCents": -34585,
+      "boothRentByStylist": {
+        "Dana Fisk": 87500,
+        "Tasha Greer": 105000,
+        "Jordan Pike": 90000,
+        "Ann": 110000,
+        "Kelsey Ortiz": 95000
+      }
+    }
+  ]
+}

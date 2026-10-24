@@ -75,6 +75,22 @@ describe("parseBankCsv", () => {
     expect(r.rows[0].line).toBe(4);
   });
 
+  it("doesn't mistake a preamble line containing 'date' and a comma for the header", () => {
+    const csv = [
+      "Account Name: EXAMPLE SALON",
+      "Activity date range: 10/01/2026 to 10/31/2026, all transactions",
+      "Last updated 10/24/2026, 3:00 PM",
+      "",
+      "Posted Date,Description,Amount,Balance",
+      "10/05/2026,Test,10,110.00",
+    ].join("\n");
+    const r = parseBankCsv(csv);
+    expect(r.errors).toEqual([]);
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0].line).toBe(6);
+    expect(r.mapping?.dateColumn).toBe("Posted Date");
+  });
+
   it("produces stable hashes, and distinguishes repeated identical rows", () => {
     const csv = ["Date,Description,Amount", "10/01/2026,Coffee,-5", "10/01/2026,Coffee,-5", "10/02/2026,Coffee,-5"].join(
       "\n",
