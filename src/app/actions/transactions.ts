@@ -6,11 +6,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
 import { requireUser } from "@/lib/auth";
-import { getCategorizer } from "@/lib/data";
+import { matchRule, norm } from "@/lib/categorize";
+import { getBoothRentCategoryId, getCategorizer } from "@/lib/data";
 import { isIsoDate, monthOf } from "@/lib/dates";
 import { parseAmountToCents } from "@/lib/money";
 
-const { transactions, rules } = schema;
+const { transactions, rules, stylists } = schema;
 
 export type TxFormState = { error?: string } | undefined;
 
@@ -120,8 +121,40 @@ export async function categorizeTransaction(formData: FormData) {
     .where(eq(transactions.id, id));
 
   if (remember && pattern && pattern.length >= 3) {
-    await db.insert(rules).values({ pattern, categoryId, direction: direction ?? "any" });
-    await applyRules();
+    const [tx] = await db
+      .select({ date: transactions.date, amountCents: transactions.amountCents, description: transactions.description })
+      .from(transactions)
+      .where(eq(transactions.id, id));
+    // Only remember patterns that actually match this transaction (same semantics as rules).
+    const matchesSelf =
+      !!tx &&
+      matchRule(tx, [{ id: "self", pattern, categoryId, direction: "any", priority: 0 }]) !== null;
+    if (matchesSelf) {
+      const boothRentId = await getBoothRentCategoryId();
+      if (stylistId && boothRentId && categoryId === boothRentId) {
+        // Booth rent: teach the stylist's match text instead of creating a rule.
+        const [st] = await db.select().from(stylists).where(eq(stylists.id, stylistId));
+        if (st) {
+          const split = (t: string | null) =>
+            (t ?? "")
+              .split(/[,;\n]/)
+              .map((x) => x.trim())
+              .filter(Boolean);
+          // No explicit match text means the full name was the implicit term; keep it.
+          const existing = split(st.matchText);
+          const base = existing.length ? existing : split(st.name);
+          if (!base.some((t) => norm(t) === norm(pattern))) {
+            await db
+              .update(stylists)
+              .set({ matchText: [...base, pattern].join(", ") })
+              .where(eq(stylists.id, stylistId));
+          }
+        }
+      } else {
+        await db.insert(rules).values({ pattern, categoryId, direction: direction ?? "any" });
+      }
+      await applyRules();
+    }
   }
   refresh();
 }

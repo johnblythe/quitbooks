@@ -182,7 +182,7 @@ export async function getCategorizer() {
   const db = await getDb();
   const [allStylists, allRules, boothRentCategoryId] = await Promise.all([
     db.select().from(stylists),
-    db.select().from(rules),
+    db.select().from(rules).orderBy(asc(rules.priority), desc(sql`length(${rules.pattern})`), asc(rules.createdAt), asc(rules.id)),
     getBoothRentCategoryId(),
   ]);
   return (tx: CategorizeInput) =>

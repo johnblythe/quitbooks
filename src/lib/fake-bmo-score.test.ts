@@ -24,8 +24,10 @@ describe("scoreFakeBmo", () => {
 
   it("flags the known substring-match trap and tags it", () => {
     const r = scoreFakeBmo(csv, truth);
-    const annual = r.wrong.find((w) => w.trap === "name-substring-annual");
-    expect(annual?.gotStylist).toBe("Ann");
+    // Whole-word stylist matching: the trap rows no longer get tagged to Ann.
+    expect(r.wrong.find((w) => w.trap === "name-substring-annual")).toBeUndefined();
+    const annual = r.uncategorized.find((u) => u.trap === "name-substring-annual");
+    expect(annual).toBeDefined();
     expect(formatScoreReport(r)).toContain("[trap: name-substring-annual]");
   });
 

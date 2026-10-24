@@ -3,19 +3,10 @@ import { Suspense } from "react";
 import { applyRulesToUncategorized, categorizeTransaction } from "@/app/actions/transactions";
 import { Button, Card, Empty, Money, PageHeader, Skeleton, inputClass } from "@/components/ui";
 import { getCategories, getStylists, getUncategorized } from "@/lib/data";
+import { suggestPattern } from "@/lib/categorize";
 import { formatDate } from "@/lib/dates";
 
 export const metadata: Metadata = { title: "Inbox" };
-
-/** Suggests a rule pattern: the description minus reference numbers, dates and trailing noise. */
-function suggestPattern(description: string): string {
-  return description
-    .toUpperCase()
-    .split(/\s+/)
-    .filter((w) => !/\d/.test(w) && w.length > 1)
-    .slice(0, 4)
-    .join(" ");
-}
 
 export default function InboxPage() {
   return (
@@ -83,7 +74,7 @@ async function InboxList() {
                   </Button>
                 </div>
                 {tx.amountCents > 0 && stylists.length ? (
-                  <select name="stylistId" defaultValue="" className={inputClass} aria-label="Stylist (for booth rent)">
+                  <select name="stylistId" defaultValue={tx.stylistId ?? ""} className={inputClass} aria-label="Stylist (for booth rent)">
                     <option value="">No stylist</option>
                     {stylists.map((s) => (
                       <option key={s.id} value={s.id}>

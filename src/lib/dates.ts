@@ -54,6 +54,13 @@ export function monthEnd(month: MonthKey): IsoDate {
   return `${month}-${String(last).padStart(2, "0")}`;
 }
 
+/** Adds (or subtracts) whole days to a YYYY-MM-DD date. */
+export function addDays(date: IsoDate, delta: number): IsoDate {
+  const [y, m, d] = date.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + delta));
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, "0")}-${String(t.getUTCDate()).padStart(2, "0")}`;
+}
+
 export function addMonths(month: MonthKey, delta: number): MonthKey {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
