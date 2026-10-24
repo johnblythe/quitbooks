@@ -3,6 +3,7 @@ import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "../src/db/schema";
+import { withVerifyFull } from "../src/lib/pg-url";
 import type { Db } from "../src/db";
 
 export async function scriptDb(): Promise<{ db: Db; migrate: () => Promise<void>; close: () => Promise<void> }> {
@@ -22,7 +23,7 @@ export async function scriptDb(): Promise<{ db: Db; migrate: () => Promise<void>
     };
   }
 
-  const pool = new Pool({ connectionString: url, max: 2 });
+  const pool = new Pool({ connectionString: withVerifyFull(url), max: 2 });
   const db = drizzle(pool, { schema });
   return {
     db,
@@ -37,7 +38,7 @@ export async function scriptDb(): Promise<{ db: Db; migrate: () => Promise<void>
  */
 async function migrateNode(url: string) {
   const { migrate } = await import("drizzle-orm/node-postgres/migrator");
-  const pool = new Pool({ connectionString: url, max: 1 });
+  const pool = new Pool({ connectionString: withVerifyFull(url), max: 1 });
   try {
     await migrate(drizzle(pool, { schema }), { migrationsFolder: "./drizzle" });
   } finally {

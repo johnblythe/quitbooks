@@ -1,6 +1,7 @@
 import { attachDatabasePool } from "@vercel/functions";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { withVerifyFull } from "@/lib/pg-url";
 import * as schema from "./schema";
 
 /**
@@ -47,7 +48,7 @@ async function createDb(): Promise<Db> {
     return drizzlePglite(client, { schema }) as unknown as Db;
   }
 
-  const pool = new Pool({ connectionString: url, max: 5 });
+  const pool = new Pool({ connectionString: withVerifyFull(url), max: 5 });
   // An idle client erroring (e.g. Neon scale-to-zero closing it) must not crash the process.
   pool.on("error", (err) => console.error("Postgres pool error:", err.message));
   attachDatabasePool(pool);
