@@ -6,6 +6,7 @@ import { commitImport, previewImport, type ImportPreview, type ImportResult } fr
 import { Button, Card, ErrorText, Field, Money, Pill, inputClass } from "@/components/ui";
 import type { CsvMapping } from "@/lib/csv";
 import { formatDate } from "@/lib/dates";
+import { MAX_CSV_BYTES, TOO_BIG_MESSAGE } from "@/lib/import-limits";
 
 export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }) {
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
@@ -13,6 +14,9 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Lines whose "Same transaction" box the user unticked. Matched rows start ticked. */
+  const [unlinked, setUnlinked] = useState<Set<number>>(new Set());
+  const [ackErrors, setAckErrors] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function runPreview(text: string, m: CsvMapping | null) {
@@ -22,6 +26,8 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
         const p = await previewImport(text, m);
         setPreview(p);
         setMapping(p.mapping);
+        setUnlinked(new Set());
+        setAckErrors(false);
       } catch {
         setError("Couldn't read that file. Is it a CSV export?");
       }
@@ -31,7 +37,13 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
   async function onFile(f: File | undefined) {
     setResult(null);
     setPreview(null);
+    setError(null);
     if (!f) return;
+    if (f.size > MAX_CSV_BYTES) {
+      setFile(null);
+      setError(TOO_BIG_MESSAGE);
+      return;
+    }
     const text = await f.text();
     setFile({ name: f.name, text });
     runPreview(text, savedMapping);
@@ -50,15 +62,23 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
     runPreview(file.text, next);
   }
 
+  const matched = preview?.rows.filter((r) => r.match && !r.duplicate) ?? [];
+  const links = matched
+    .filter((r) => !unlinked.has(r.line))
+    .map((r) => ({ line: r.line, transactionId: r.match!.transactionId }));
+  const errorCount = preview?.errors.length ?? 0;
+  const toInsert = (preview?.newCount ?? 0) - links.length;
+  const canImport = !pending && !!mapping && (preview?.newCount ?? 0) > 0 && (errorCount === 0 || ackErrors);
+
   function onCommit() {
     if (!file || !mapping) return;
     startTransition(async () => {
       try {
-        setResult(await commitImport(file.text, mapping, file.name));
+        setResult(await commitImport(file.text, mapping, file.name, links, ackErrors));
         setPreview(null);
         setFile(null);
       } catch {
-        setError("The import didn't finish. It's safe to try again; anything already added will be skipped.");
+        setError("The import didn't finish and nothing was saved. It's safe to try again.");
       }
     });
   }
@@ -70,8 +90,23 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
         <p className="font-serif text-xl">Imported {result.inserted} transactions</p>
         <p className="mt-1 text-sm text-ink-2">
           {result.skipped ? `${result.skipped} were already here and were skipped. ` : ""}
+          {result.linked ? `${result.linked} linked to existing entries. ` : ""}
           Anything the rules couldn’t sort is waiting in the Inbox.
         </p>
+        {result.errors.length ? (
+          <div className="mt-3 rounded-lg border border-warn/40 p-3 text-sm" role="alert">
+            <p className="font-medium text-warn">
+              {result.errors.length} rows couldn’t be read and were NOT imported
+            </p>
+            <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-ink-2">
+              {result.errors.map((e, i) => (
+                <li key={i}>
+                  Line {e.line}: {e.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="mt-4 flex gap-2">
           <Link href="/inbox" className="text-sm font-medium text-accent underline">
             Go to Inbox
@@ -162,20 +197,60 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
               </span>
             }
           >
-            {preview.errors.length ? (
-              <details className="mb-3 text-sm">
-                <summary className="cursor-pointer text-warn">{preview.errors.length} rows couldn’t be read</summary>
-                <ul className="mt-2 space-y-1 text-xs text-ink-2">
-                  {preview.errors.slice(0, 20).map((e, i) => (
+            {errorCount ? (
+              <div className="mb-3 rounded-lg border border-warn/40 p-3 text-sm" role="alert">
+                <p className="font-medium text-warn">{errorCount} rows couldn’t be read</p>
+                <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-ink-2">
+                  {preview.errors.slice(0, 100).map((e, i) => (
                     <li key={i}>
                       Line {e.line}: {e.message}
                     </li>
                   ))}
                 </ul>
-              </details>
+                {errorCount > 100 ? <p className="mt-1 text-xs text-ink-2">…and {errorCount - 100} more.</p> : null}
+              </div>
+            ) : null}
+            {matched.length ? (
+              <div className="mb-3">
+                <p className="text-sm font-medium">
+                  {matched.length} {matched.length === 1 ? "row matches an entry" : "rows match entries"} you made by hand
+                </p>
+                <p className="text-xs text-ink-2">
+                  Ticked rows are linked to your entry instead of being added again.
+                </p>
+                <ul className="mt-2 divide-y divide-line text-sm">
+                  {matched.map((r) => (
+                    <li key={r.line} className="flex items-start justify-between gap-3 py-2">
+                      <label className="flex min-w-0 cursor-pointer items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={!unlinked.has(r.line)}
+                          onChange={(e) =>
+                            setUnlinked((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.delete(r.line);
+                              else next.add(r.line);
+                              return next;
+                            })
+                          }
+                          className="mt-1 h-4 w-4 shrink-0 accent-[var(--accent)]"
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate">{r.description}</span>
+                          <span className="block text-xs text-ink-2">
+                            Matches your entry from {formatDate(r.match!.date)}: {r.match!.description}
+                          </span>
+                          <span className="block text-xs font-medium">Same transaction</span>
+                        </span>
+                      </label>
+                      <Money cents={r.amountCents} signed className={r.amountCents > 0 ? "shrink-0 text-good" : "shrink-0"} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
             <ul className="max-h-[50vh] divide-y divide-line overflow-y-auto text-sm">
-              {preview.rows.slice(0, 200).map((r) => (
+              {preview.rows.filter((r) => r.duplicate || !r.match).slice(0, 200).map((r) => (
                 <li key={r.line} className={`flex items-center justify-between gap-3 py-2 ${r.duplicate ? "opacity-50" : ""}`}>
                   <span className="min-w-0">
                     <span className="block truncate">{r.description}</span>
@@ -199,8 +274,31 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
             ) : null}
           </Card>
 
-          <Button onClick={onCommit} disabled={pending || !mapping || preview.newCount === 0} className="w-full">
-            {preview.newCount === 0 ? "Nothing new to import" : `Import ${preview.newCount} transactions`}
+          {errorCount ? (
+            <label className="flex items-start gap-2 rounded-lg border border-warn/40 p-3 text-sm" role="group">
+              <input
+                type="checkbox"
+                checked={ackErrors}
+                onChange={(e) => setAckErrors(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
+              />
+              <span>
+                <span className="font-medium text-warn">
+                  {errorCount} {errorCount === 1 ? "row" : "rows"} couldn’t be read.
+                </span>{" "}
+                Import without these {errorCount} rows
+              </span>
+            </label>
+          ) : null}
+
+          <Button onClick={onCommit} disabled={!canImport} className="w-full">
+            {preview.newCount === 0
+              ? "Nothing new to import"
+              : toInsert === 0
+                ? `Link ${links.length} existing ${links.length === 1 ? "entry" : "entries"}`
+                : links.length
+                  ? `Import ${toInsert} transactions, link ${links.length}`
+                  : `Import ${toInsert} transactions`}
           </Button>
         </>
       ) : null}
