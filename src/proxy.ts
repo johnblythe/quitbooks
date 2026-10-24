@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session-token";
 
-/** Sends anyone without a valid session to /login. Actions re-check via requireUser(). */
+/**
+ * Sends anyone without a validly signed session to /login. Stateless on purpose: it does not
+ * touch the DB. Actions and handlers re-check (including session revocation) via requireUser().
+ */
 export async function proxy(request: NextRequest) {
   const session = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
   if (session) return NextResponse.next();
@@ -12,6 +15,14 @@ export async function proxy(request: NextRequest) {
   return NextResponse.redirect(url);
 }
 
+/**
+ * Skips only: /login and /login/..., _next/static, _next/image, and root-level metadata files
+ * (favicon.ico, icon*, apple-icon*, manifest*). Every exclusion is anchored, so dynamic app
+ * routes that merely end in .png/.svg or start with "login"/"icon" are still guarded.
+ * Must stay a literal: Next reads it statically. Tested in proxy.test.ts.
+ */
 export const config = {
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico|icon|apple-icon|manifest|.*\\.(?:png|svg|ico|webmanifest)$).*)"],
+  matcher: [
+    "/((?!login$|login/|_next/static/|_next/image$|favicon\\.ico$|icon\\d*\\.(?:ico|png|jpg|jpeg|svg)$|apple-icon\\d*\\.(?:png|jpg|jpeg)$|manifest\\.(?:json|webmanifest)$).*)",
+  ],
 };

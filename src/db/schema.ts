@@ -21,8 +21,23 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   passwordHash: text("password_hash").notNull(),
+  /** Bumped by `user:add` on an existing email; sessions carrying an older value are rejected. */
+  sessionVersion: integer("session_version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Failed (and, in principle, successful) logins, for rate limiting. Pruned after a day. */
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    ip: text("ip").notNull(),
+    ok: boolean("ok").notNull(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("login_attempts_email_at_idx").on(t.email, t.at), index("login_attempts_ip_at_idx").on(t.ip, t.at)],
+);
 
 export const categories = pgTable("categories", {
   id: uuid("id").primaryKey().defaultRandom(),
