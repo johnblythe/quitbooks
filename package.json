@@ -18,7 +18,8 @@
     "fake:bmo": "tsx scripts/fake-bmo-csv.ts",
     "fake:load": "tsx scripts/fake-load.ts",
     "fake:score": "tsx scripts/fake-score.ts",
-    "user:add": "tsx scripts/add-user.ts"
+    "user:add": "tsx scripts/add-user.ts",
+    "bank:sync": "tsx scripts/bank-sync.ts"
   },
   "dependencies": {
     "@vercel/functions": "^3.10.3",

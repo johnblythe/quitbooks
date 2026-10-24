@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { BankBanner } from "@/components/bank-banner";
 import { Meter, ProfitBars } from "@/components/charts";
 import { MonthSwitcher, resolveMonth } from "@/components/month-switcher";
 import { ButtonLink, Card, Empty, Money, PageHeader, Pill, Skeleton } from "@/components/ui";
-import { countUncategorized, getBoothRentCategoryId, getCategories, getMetricTxs, getSettings, getStylists, requestToday } from "@/lib/data";
-import { addMonths, formatMonth, monthOf, monthRange, monthStart } from "@/lib/dates";
+import { countUncategorized, getBankConnection, getBoothRentCategoryId, getCategories, getMetricTxs, getSettings, getStylists, requestToday } from "@/lib/data";
+import { addMonths, formatDate, formatMonth, monthOf, monthRange, monthStart } from "@/lib/dates";
 import {
   currentBalance,
   expensesByCategory,
@@ -13,6 +14,8 @@ import {
   rentStatusForMonth,
   runwayMonths,
 } from "@/lib/metrics";
+import { reconcile } from "@/lib/bank-status";
+import { unixToLocalDate } from "@/lib/simplefin";
 
 export default function DashboardPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   return (
@@ -38,12 +41,13 @@ async function Dashboard({ searchParams }: { searchParams: Promise<{ month?: str
   const trendMonths = monthRange(addMonths(month, -5), month);
   const priorMonths = monthRange(addMonths(month, -3), addMonths(month, -1));
 
-  const [categories, stylists, settings, boothRentId, uncategorized] = await Promise.all([
+  const [categories, stylists, settings, boothRentId, uncategorized, bank] = await Promise.all([
     getCategories({ includeArchived: true }),
     getStylists(),
     getSettings(),
     getBoothRentCategoryId(),
     countUncategorized(),
+    getBankConnection(),
   ]);
   // Balance needs everything since the opening balance date; trends need the last ~9 months.
   const since = [settings.openingBalance?.asOf, monthStart(addMonths(month, -8))].filter(Boolean).sort()[0];
@@ -59,6 +63,12 @@ async function Dashboard({ searchParams }: { searchParams: Promise<{ month?: str
   const balance = settings.openingBalance ? currentBalance(settings.openingBalance, txs) : null;
   const runway = balance !== null ? runwayMonths(balance, prior) : null;
 
+  const bankAccounts = bank?.accounts.filter((a) => a.include && a.balanceCents !== null) ?? [];
+  const bankCents = bankAccounts.length ? bankAccounts.reduce((s, a) => s + (a.balanceCents ?? 0), 0) : null;
+  const bankDates = bankAccounts.flatMap((a) => (a.balanceDate ? [a.balanceDate.getTime()] : []));
+  const bankAsOf = bankDates.length ? unixToLocalDate(Math.max(...bankDates) / 1000) : null;
+  const recon = bankCents !== null && balance !== null ? reconcile(bankCents, balance) : null;
+
   const rentExpected = rent.reduce((s, r) => s + r.expected, 0);
   const rentCollected = rent.reduce((s, r) => s + r.collected, 0);
   const isCurrent = month === current;
@@ -68,6 +78,8 @@ async function Dashboard({ searchParams }: { searchParams: Promise<{ month?: str
       <div className="flex justify-center">
         <MonthSwitcher month={month} basePath="/" current={current} />
       </div>
+
+      <BankBanner />
 
       {uncategorized > 0 ? (
         <Link
@@ -189,6 +201,12 @@ async function Dashboard({ searchParams }: { searchParams: Promise<{ month?: str
         </Card>
 
         <Card title="Cash runway">
+          {balance === null && bankCents !== null ? (
+            <p className="mb-3 text-sm text-ink-2">
+              BMO says <Money cents={bankCents} whole />
+              {bankAsOf ? ` (as of ${formatDate(bankAsOf)})` : ""}
+            </p>
+          ) : null}
           {balance === null ? (
             <Empty>
               Add your bank balance in <Link href="/settings" className="text-accent underline">Settings</Link> to see this.
@@ -202,6 +220,21 @@ async function Dashboard({ searchParams }: { searchParams: Promise<{ month?: str
               <p className="mt-2 text-sm text-ink-2">
                 <Money cents={balance} whole /> in the bank covers this long at recent spending if rent stopped.
               </p>
+              {recon ? (
+                <p className="mt-3 border-t border-line pt-3 text-sm text-ink-2">
+                  BMO says <Money cents={recon.bankCents} />
+                  {bankAsOf ? ` (as of ${formatDate(bankAsOf)})` : ""} · Books say <Money cents={recon.booksCents} />{" "}
+                  {recon.kind === "match" ? (
+                    <span className="text-good" aria-label="Books match the bank">
+                      ✓
+                    </span>
+                  ) : (
+                    <Link href="/transactions" className="text-bad underline">
+                      Off by <Money cents={Math.abs(recon.diffCents)} />
+                    </Link>
+                  )}
+                </p>
+              ) : null}
             </>
           )}
         </Card>

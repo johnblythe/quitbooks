@@ -4,17 +4,18 @@ import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { BOOTH_RENT_KEY, SETTING_KEYS, type OpeningBalance } from "@/db/defaults";
 import type { CsvMapping } from "./csv";
-import type { CategorizeInput } from "./categorize";
-import { categorize } from "./categorize";
+import { makeCategorizer } from "./categorizer";
+import { defaultCutover } from "./bank-status";
 import { monthEnd, monthStart, todayIso, type IsoDate, type MonthKey } from "./dates";
 import type { MetricTx } from "./metrics";
+import { bankAttention } from "./bank-status";
 
 /**
  * Data access layer. Every read awaits connection() so it runs at request time
  * (Cache Components would otherwise try to prerender it at build).
  */
 
-const { categories, stylists, transactions, rules, settings, csvMappings, importBatches } = schema;
+const { categories, stylists, transactions, rules, settings, csvMappings, importBatches, bankConnections, bankAccounts } = schema;
 
 export const BMO_MAPPING_NAME = "BMO";
 
@@ -188,18 +189,65 @@ export async function getRecentImports(limit = 5) {
 
 /** Everything the categorizer needs, loaded once per import or entry. */
 export async function getCategorizer() {
-  const db = await getDb();
-  const [allStylists, allRules, boothRentCategoryId] = await Promise.all([
-    db.select().from(stylists),
-    db.select().from(rules).orderBy(asc(rules.priority), desc(sql`length(${rules.pattern})`), asc(rules.createdAt), asc(rules.id)),
-    getBoothRentCategoryId(),
-  ]);
-  return (tx: CategorizeInput) =>
-    categorize(tx, { stylists: allStylists, rules: allRules, boothRentCategoryId });
+  return makeCategorizer(await getDb());
 }
 
 /** Today's date, computed per request (never baked in at build time). */
 export async function requestToday() {
   await connection();
   return todayIso();
+}
+
+/**
+ * The bank feed connection and its accounts. Deliberately selects no credential column:
+ * the encrypted Access URL never leaves the sync code.
+ */
+export async function getBankConnection() {
+  await connection();
+  const db = await getDb();
+  const [conn] = await db
+    .select({
+      id: bankConnections.id,
+      label: bankConnections.label,
+      cutoverDate: bankConnections.cutoverDate,
+      lastSyncedAt: bankConnections.lastSyncedAt,
+      lastError: bankConnections.lastError,
+      lastErrorAt: bankConnections.lastErrorAt,
+      createdAt: bankConnections.createdAt,
+    })
+    .from(bankConnections)
+    .orderBy(asc(bankConnections.createdAt))
+    .limit(1);
+  if (!conn) return null;
+  const accounts = await db
+    .select({
+      id: bankAccounts.id,
+      name: bankAccounts.name,
+      orgName: bankAccounts.orgName,
+      balanceCents: bankAccounts.balanceCents,
+      availableCents: bankAccounts.availableCents,
+      balanceDate: bankAccounts.balanceDate,
+      include: bankAccounts.include,
+    })
+    .from(bankAccounts)
+    .where(eq(bankAccounts.connectionId, conn.id))
+    .orderBy(asc(bankAccounts.name));
+  return { ...conn, accounts, active: accounts.some((a) => a.include) };
+}
+
+export type BankConnectionView = NonNullable<Awaited<ReturnType<typeof getBankConnection>>>;
+
+/** Banner text when the feed needs attention (error, or no good sync for 3+ days), else null. */
+export async function getBankAttention(): Promise<string | null> {
+  const c = await getBankConnection();
+  if (!c) return null;
+  return bankAttention({ lastSyncedAt: c.lastSyncedAt, lastError: c.lastError, createdAt: c.createdAt, active: c.active }, new Date());
+}
+
+/** Latest default start date suggestion for a new connection: day after the newest transaction, else 90 days ago. */
+export async function getDefaultBankCutover() {
+  const today = await requestToday();
+  const db = await getDb();
+  const [row] = await db.select({ d: transactions.date }).from(transactions).orderBy(desc(transactions.date)).limit(1);
+  return defaultCutover(row?.d ?? null, today);
 }

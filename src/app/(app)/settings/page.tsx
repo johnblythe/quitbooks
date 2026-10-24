@@ -3,7 +3,9 @@ import { Suspense } from "react";
 import { addCategory, renameCategory, toggleCategoryArchived } from "@/app/actions/settings";
 import { applyRulesToUncategorized } from "@/app/actions/transactions";
 import { Button, Card, Empty, PageHeader, Pill, Skeleton, cx, inputClass } from "@/components/ui";
-import { getCategories, getRules, getSettings } from "@/lib/data";
+import { getBankConnection, getCategories, getDefaultBankCutover, getRules, getSettings } from "@/lib/data";
+import { unixToLocalDate } from "@/lib/simplefin";
+import { ConnectForm, ConnectedView, SetupForm, type BankCardConnection } from "./bank-card";
 import { BusinessForm } from "./business-form";
 import { AddRuleForm, RuleRow } from "./rule-editor";
 
@@ -23,13 +25,48 @@ export default function SettingsPage() {
 }
 
 async function SettingsContent() {
-  const [settings, categories, rules] = await Promise.all([getSettings(), getCategories({ includeArchived: true }), getRules()]);
+  const [settings, categories, rules, bank, defaultCutover] = await Promise.all([
+    getSettings(),
+    getCategories({ includeArchived: true }),
+    getRules(),
+    getBankConnection(),
+    getDefaultBankCutover(),
+  ]);
+  const bankView: BankCardConnection | null = bank && {
+    id: bank.id,
+    label: bank.label,
+    // A connection that hasn't been set up yet suggests the default start date; a finished one shows what it saved.
+    cutoverDate: bank.active ? bank.cutoverDate : defaultCutover,
+    lastSyncedAt: bank.lastSyncedAt
+      ? new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/Indiana/Indianapolis",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(bank.lastSyncedAt)
+      : null,
+    lastError: bank.lastError,
+    active: bank.active,
+    accounts: bank.accounts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      orgName: a.orgName,
+      balanceCents: a.balanceCents,
+      balanceDate: a.balanceDate ? unixToLocalDate(a.balanceDate.getTime() / 1000) : null,
+      include: a.include,
+    })),
+  };
   const active = categories.filter((c) => !c.archived);
 
   return (
     <div className="space-y-4">
       <Card title="The salon">
         <BusinessForm totalChairs={settings.totalChairs} opening={settings.openingBalance} />
+      </Card>
+
+      <Card title="Bank connection">
+        {!bankView ? <ConnectForm /> : bankView.active ? <ConnectedView conn={bankView} /> : <SetupForm conn={bankView} />}
       </Card>
 
       <Card

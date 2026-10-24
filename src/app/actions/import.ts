@@ -6,6 +6,8 @@ import { parseBankCsv, type CsvMapping, type RowError } from "@/lib/csv";
 import { BMO_MAPPING_NAME, getCategorizer } from "@/lib/data";
 import { commitParsedImport, existingHashes, findManualCandidates, ImportLinkError } from "@/lib/import-commit";
 import { matchManualEntries } from "@/lib/import-match";
+import { activeCutoverDate } from "@/lib/bank-sync-server";
+import { splitByCutover } from "@/lib/bank-cutover";
 import { csvByteLength, MAX_CSV_BYTES, TOO_BIG_MESSAGE } from "@/lib/import-limits";
 import { csvMappingSchema, csvTextSchema, filenameSchema, linksSchema, type ImportLink } from "@/lib/import-schema";
 
@@ -33,6 +35,8 @@ export type ImportPreview = {
   newCount: number;
   duplicateCount: number;
   matchCount: number;
+  /** Rows dated on/after the bank feed's start date; they are left out of the preview and the import. */
+  coveredCount: number;
 };
 
 export type ImportResult =
@@ -46,6 +50,8 @@ export type ImportResult =
       months: string[];
       /** Rows that couldn't be read and were NOT imported. */
       errors: RowError[];
+      /** Rows skipped because the bank feed already covers their dates. */
+      covered: number;
     }
   | { ok: false; error: string };
 
@@ -58,6 +64,7 @@ function emptyPreview(message: string): ImportPreview {
     newCount: 0,
     duplicateCount: 0,
     matchCount: 0,
+    coveredCount: 0,
   };
 }
 
@@ -69,8 +76,10 @@ export async function previewImport(text: unknown, mapping: unknown): Promise<Im
   if (!t.success || csvByteLength(t.data) > MAX_CSV_BYTES) return emptyPreview(TOO_BIG_MESSAGE);
   if (!m.success) return emptyPreview("That column mapping isn't valid.");
 
-  const parsed = parseBankCsv(t.data, m.data);
   const db = await getDb();
+  const parsedAll = parseBankCsv(t.data, m.data);
+  const { kept, covered } = splitByCutover(parsedAll.rows, await activeCutoverDate(db));
+  const parsed = { ...parsedAll, rows: kept };
   const dupes = await existingHashes(db, parsed.rows.map((r) => r.dedupeHash));
   const categorizer = await getCategorizer();
 
@@ -111,6 +120,7 @@ export async function previewImport(text: unknown, mapping: unknown): Promise<Im
     newCount: rows.length - duplicateCount,
     duplicateCount,
     matchCount: matches.size,
+    coveredCount: covered.length,
   };
 }
 
@@ -134,8 +144,11 @@ export async function commitImport(
   const l = linksSchema.safeParse(links);
   if (!m.success || !f.success || !l.success) return { ok: false, error: "That import request wasn't valid." };
 
-  const parsed = parseBankCsv(t.data, m.data);
-  if (!parsed.rows.length) return { ok: false, error: "No rows to import." };
+  const db = await getDb();
+  const parsedAll = parseBankCsv(t.data, m.data);
+  if (!parsedAll.rows.length) return { ok: false, error: "No rows to import." };
+  const { kept, covered } = splitByCutover(parsedAll.rows, await activeCutoverDate(db));
+  const parsed = { ...parsedAll, rows: kept };
   if (parsed.errors.length && ackErrors !== true) {
     return {
       ok: false,
@@ -143,7 +156,9 @@ export async function commitImport(
     };
   }
 
-  const db = await getDb();
+  if (!parsed.rows.length) {
+    return { ok: true, inserted: 0, skipped: 0, linked: 0, months: [], errors: parsed.errors, covered: covered.length };
+  }
   const categorizer = await getCategorizer();
   const confirmed: ImportLink[] = l.data;
 
@@ -164,6 +179,7 @@ export async function commitImport(
       linked: out.linked,
       months: out.months,
       errors: parsed.errors,
+      covered: covered.length,
     };
   } catch (e) {
     if (e instanceof ImportLinkError) return { ok: false, error: e.message };

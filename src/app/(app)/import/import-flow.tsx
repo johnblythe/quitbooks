@@ -6,6 +6,7 @@ import { commitImport, previewImport, type ImportPreview, type ImportResult } fr
 import { Button, Card, ErrorText, Field, Money, Pill, inputClass } from "@/components/ui";
 import type { CsvMapping } from "@/lib/csv";
 import { formatDate } from "@/lib/dates";
+import { coveredNote } from "@/lib/bank-cutover";
 import { MAX_CSV_BYTES, TOO_BIG_MESSAGE } from "@/lib/import-limits";
 
 export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }) {
@@ -91,6 +92,7 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
         <p className="mt-1 text-sm text-ink-2">
           {result.skipped ? `${result.skipped} were already here and were skipped. ` : ""}
           {result.linked ? `${result.linked} linked to existing entries. ` : ""}
+          {result.covered ? `${coveredNote(result.covered)} ` : ""}
           Anything the rules couldn’t sort is waiting in the Inbox.
         </p>
         {result.errors.length ? (
@@ -197,6 +199,9 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
               </span>
             }
           >
+            {preview.coveredCount ? (
+              <p className="mb-3 rounded-lg bg-surface-2 px-3 py-2 text-sm text-ink-2">{coveredNote(preview.coveredCount)}</p>
+            ) : null}
             {errorCount ? (
               <div className="mb-3 rounded-lg border border-warn/40 p-3 text-sm" role="alert">
                 <p className="font-medium text-warn">{errorCount} rows couldn’t be read</p>

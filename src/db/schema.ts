@@ -76,6 +76,54 @@ export const importBatches = pgTable("import_batches", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** A linked bank feed (SimpleFIN). The Access URL holds credentials, so it is stored encrypted. */
+export const bankConnections = pgTable("bank_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider", { enum: ["simplefin"] }).notNull().default("simplefin"),
+  /** AES-256-GCM of the Access URL (see src/lib/bank-crypto.ts). Never returned to the client. */
+  accessUrlEnc: text("access_url_enc").notNull(),
+  label: text("label").notNull(),
+  /** Feed rows dated before this are ignored; CSV rows on/after it are skipped. */
+  cutoverDate: date("cutover_date").notNull(),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const bankAccounts = pgTable(
+  "bank_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => bankConnections.id, { onDelete: "cascade" }),
+    externalId: text("external_id").notNull(),
+    name: text("name").notNull(),
+    orgName: text("org_name").notNull().default(""),
+    currency: text("currency").notNull().default("USD"),
+    balanceCents: integer("balance_cents"),
+    availableCents: integer("available_cents"),
+    balanceDate: timestamp("balance_date", { withTimezone: true }),
+    /** Only included accounts are synced. */
+    include: boolean("include").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("bank_accounts_conn_ext_idx").on(t.connectionId, t.externalId)],
+);
+
+/** One row per sync attempt, for debugging the feed. */
+export const bankSyncRuns = pgTable("bank_sync_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  connectionId: uuid("connection_id").references(() => bankConnections.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  inserted: integer("inserted").notNull().default(0),
+  linked: integer("linked").notNull().default(0),
+  skipped: integer("skipped").notNull().default(0),
+  error: text("error"),
+});
+
 export const transactions = pgTable(
   "transactions",
   {
@@ -92,6 +140,9 @@ export const transactions = pgTable(
     }),
     /** Stable fingerprint of an imported bank row; prevents double-importing the same CSV. */
     dedupeHash: text("dedupe_hash"),
+    /** Set on rows that came from (or were matched to) a bank feed transaction. */
+    bankAccountId: uuid("bank_account_id").references(() => bankAccounts.id, { onDelete: "set null" }),
+    externalId: text("external_id"),
     createdBy: uuid("created_by").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -101,6 +152,7 @@ export const transactions = pgTable(
     index("transactions_category_idx").on(t.categoryId),
     index("transactions_stylist_idx").on(t.stylistId),
     uniqueIndex("transactions_dedupe_hash_idx").on(t.dedupeHash),
+    uniqueIndex("transactions_bank_ext_idx").on(t.bankAccountId, t.externalId),
   ],
 );
 
@@ -139,3 +191,5 @@ export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type Rule = typeof rules.$inferSelect;
 export type ImportBatch = typeof importBatches.$inferSelect;
+export type BankConnection = typeof bankConnections.$inferSelect;
+export type BankAccount = typeof bankAccounts.$inferSelect;

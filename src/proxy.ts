@@ -16,13 +16,13 @@ export async function proxy(request: NextRequest) {
 }
 
 /**
- * Skips only: /login and /login/..., _next/static, _next/image, and root-level metadata files
+ * Skips only: /login and /login/..., exactly /api/cron/bank-sync (authenticates itself with CRON_SECRET), _next/static, _next/image, and root-level metadata files
  * (favicon.ico, icon*, apple-icon*, manifest*). Every exclusion is anchored, so dynamic app
  * routes that merely end in .png/.svg or start with "login"/"icon" are still guarded.
  * Must stay a literal: Next reads it statically. Tested in proxy.test.ts.
  */
 export const config = {
   matcher: [
-    "/((?!login$|login/|_next/static/|_next/image$|favicon\\.ico$|icon\\d*\\.(?:ico|png|jpg|jpeg|svg)$|apple-icon\\d*\\.(?:png|jpg|jpeg)$|manifest\\.(?:json|webmanifest)$).*)",
+    "/((?!login$|login/|api/cron/bank-sync$|_next/static/|_next/image$|favicon\\.ico$|icon\\d*\\.(?:ico|png|jpg|jpeg|svg)$|apple-icon\\d*\\.(?:png|jpg|jpeg)$|manifest\\.(?:json|webmanifest)$).*)",
   ],
 };

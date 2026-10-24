@@ -15,6 +15,13 @@
       "when": 1792871341167,
       "tag": "0001_gray_ulik",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792875057172,
+      "tag": "0002_great_molten_man",
+      "breakpoints": true
     }
   ]
 }

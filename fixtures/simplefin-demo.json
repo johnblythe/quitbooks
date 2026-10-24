@@ -1,0 +1,486 @@
+{
+  "accounts": [
+    {
+      "id": "Demo Savings",
+      "name": "SimpleFIN Savings",
+      "currency": "USD",
+      "balance": "114265.51",
+      "available-balance": "114265.51",
+      "balance-date": 1792874959,
+      "transactions": [
+        {
+          "id": "1792068559",
+          "posted": 1792068559,
+          "amount": "-70.00",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792068559,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792111759",
+          "posted": 1792111759,
+          "amount": "1960.00",
+          "description": "Pay day!",
+          "payee": "You",
+          "memo": "PAY DAY - FROM YER JOB",
+          "transacted_at": 1792111759,
+          "mcc": null
+        },
+        {
+          "id": "1792126159",
+          "posted": 1792126159,
+          "amount": "-75.50",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792126159,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792154959",
+          "posted": 1792154959,
+          "amount": "-65.50",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792154959,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792212559",
+          "posted": 1792212559,
+          "amount": "-80.00",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792212559,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792241359",
+          "posted": 1792241359,
+          "amount": "-60.00",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792241359,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792298959",
+          "posted": 1792298959,
+          "amount": "-85.50",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792298959,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792327759",
+          "posted": 1792327759,
+          "amount": "-55.50",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792327759,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792385359",
+          "posted": 1792385359,
+          "amount": "-90.00",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792385359,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792414159",
+          "posted": 1792414159,
+          "amount": "-50.00",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792414159,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792471759",
+          "posted": 1792471759,
+          "amount": "-95.50",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792471759,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792500559",
+          "posted": 1792500559,
+          "amount": "-45.50",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792500559,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792558159",
+          "posted": 1792558159,
+          "amount": "-100.00",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792558159,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792586959",
+          "posted": 1792586959,
+          "amount": "-40.00",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792586959,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792644559",
+          "posted": 1792644559,
+          "amount": "-105.50",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792644559,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792673359",
+          "posted": 1792673359,
+          "amount": "-35.50",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792673359,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792730959",
+          "posted": 1792730959,
+          "amount": "-110.00",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792730959,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792759759",
+          "posted": 1792759759,
+          "amount": "-30.00",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792759759,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792817359",
+          "posted": 1792817359,
+          "amount": "-115.50",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792817359,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792846159",
+          "posted": 1792846159,
+          "amount": "-25.50",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792846159,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792903759",
+          "posted": 1792903759,
+          "amount": "-120.00",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792903759,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792932559",
+          "posted": 1792932559,
+          "amount": "-20.00",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792932559,
+          "mcc": "5411"
+        }
+      ],
+      "conn_id": "CON-SIMPLEFIN-DEMO"
+    },
+    {
+      "id": "Demo Checking",
+      "name": "SimpleFIN Checking",
+      "currency": "USD",
+      "balance": "24485.55",
+      "available-balance": "24485.55",
+      "balance-date": 1792874959,
+      "transactions": [
+        {
+          "id": "1792068559",
+          "posted": 1792068559,
+          "amount": "-91.16",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792068559,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792111759",
+          "posted": 1792111759,
+          "amount": "2564.48",
+          "description": "Pay day!",
+          "payee": "You",
+          "memo": "PAY DAY - FROM YER JOB",
+          "transacted_at": 1792111759,
+          "mcc": null
+        },
+        {
+          "id": "1792126159",
+          "posted": 1792126159,
+          "amount": "-98.81",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792126159,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792154959",
+          "posted": 1792154959,
+          "amount": "-85.51",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792154959,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792212559",
+          "posted": 1792212559,
+          "amount": "-104.47",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792212559,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792241359",
+          "posted": 1792241359,
+          "amount": "-78.85",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792241359,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792298959",
+          "posted": 1792298959,
+          "amount": "-111.12",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792298959,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792327759",
+          "posted": 1792327759,
+          "amount": "-72.20",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792327759,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792385359",
+          "posted": 1792385359,
+          "amount": "-117.78",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792385359,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792414159",
+          "posted": 1792414159,
+          "amount": "-65.54",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792414159,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792471759",
+          "posted": 1792471759,
+          "amount": "-124.43",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792471759,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792500559",
+          "posted": 1792500559,
+          "amount": "-58.89",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792500559,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792558159",
+          "posted": 1792558159,
+          "amount": "-130.09",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792558159,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792586959",
+          "posted": 1792586959,
+          "amount": "-52.23",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792586959,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792644559",
+          "posted": 1792644559,
+          "amount": "-137.74",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792644559,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792673359",
+          "posted": 1792673359,
+          "amount": "-45.58",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792673359,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792730959",
+          "posted": 1792730959,
+          "amount": "-143.39",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792730959,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792759759",
+          "posted": 1792759759,
+          "amount": "-39.93",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792759759,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792817359",
+          "posted": 1792817359,
+          "amount": "-150.05",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792817359,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792846159",
+          "posted": 1792846159,
+          "amount": "-32.27",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792846159,
+          "mcc": "5411"
+        },
+        {
+          "id": "1792903759",
+          "posted": 1792903759,
+          "amount": "-157.70",
+          "description": "Fishing bait",
+          "payee": "John's Fishin Shack",
+          "memo": "JOHNS FISHIN SHACK BAIT",
+          "transacted_at": 1792903759,
+          "mcc": "5812"
+        },
+        {
+          "id": "1792932559",
+          "posted": 1792932559,
+          "amount": "-26.62",
+          "description": "Grocery store",
+          "payee": "Grocery store",
+          "memo": "LOCAL GROCER STORE #1133",
+          "transacted_at": 1792932559,
+          "mcc": "5411"
+        }
+      ],
+      "conn_id": "CON-SIMPLEFIN-DEMO"
+    },
+    {
+      "id": "Demo Empty Account",
+      "name": "SimpleFIN Empty Account",
+      "currency": "USD",
+      "balance": "0.00",
+      "available-balance": "0.00",
+      "balance-date": 1792874959,
+      "transactions": [],
+      "conn_id": "CON-SIMPLEFIN-DEMO"
+    }
+  ],
+  "connections": [
+    {
+      "conn_id": "CON-SIMPLEFIN-DEMO",
+      "name": "SimpleFIN Demo",
+      "org_id": "simplefin.demoorg",
+      "org_name": "SimpleFIN Bridge",
+      "org_url": "https://beta-bridge.simplefin.org",
+      "sfin_url": "https://beta-bridge.simplefin.org/simplefin"
+    }
+  ]
+}

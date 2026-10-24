@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { applyRulesToUncategorized, categorizeGroup, categorizeTransaction } from "@/app/actions/transactions";
+import { BankBanner } from "@/components/bank-banner";
 import { Button, Card, Empty, Money, PageHeader, Skeleton, inputClass } from "@/components/ui";
 import type { TxRow } from "@/lib/data";
 import { INBOX_LIMIT, getCategories, getInboxRows, getStylists } from "@/lib/data";
@@ -60,11 +61,19 @@ function CategorySelect({ categories, direction }: { categories: Category[]; dir
 async function InboxList() {
   const [inbox, categories, stylists] = await Promise.all([getInboxRows(), getCategories(), getStylists()]);
   const { rows } = inbox;
-  if (!rows.length) return <Empty>All caught up. Nice.</Empty>;
+  if (!rows.length) {
+    return (
+      <div className="space-y-4">
+        <BankBanner />
+        <Empty>All caught up. Nice.</Empty>
+      </div>
+    );
+  }
   const { groups, oneOffs } = groupInbox(rows);
 
   return (
     <div className="space-y-4">
+      <BankBanner />
       <p className="text-sm text-ink-2">
         {inbox.total} to sort · {groups.length} {groups.length === 1 ? "group" : "groups"}
       </p>

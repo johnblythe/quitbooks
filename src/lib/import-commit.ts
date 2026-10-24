@@ -59,6 +59,7 @@ export async function findManualCandidates(
         and(
           eq(transactions.source, "manual"),
           isNull(transactions.dedupeHash),
+          isNull(transactions.bankAccountId),
           inArray(transactions.amountCents, chunk),
           between(transactions.date, from, to),
         ),
@@ -126,6 +127,7 @@ export async function commitParsedImport(db: Db, input: CommitInput): Promise<Co
             eq(transactions.id, l.transactionId),
             eq(transactions.source, "manual"),
             isNull(transactions.dedupeHash),
+            isNull(transactions.bankAccountId),
             eq(transactions.amountCents, row.amountCents),
             between(transactions.date, addDays(row.date, -MATCH_WINDOW_DAYS), addDays(row.date, MATCH_WINDOW_DAYS)),
           ),
