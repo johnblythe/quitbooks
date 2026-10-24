@@ -83,6 +83,7 @@ const txSelect = {
   categoryId: transactions.categoryId,
   stylistId: transactions.stylistId,
   suggestedCategoryId: transactions.suggestedCategoryId,
+  suggestedAt: transactions.suggestedAt,
   categoryName: categories.name,
   categoryKind: categories.kind,
   stylistName: stylists.name,

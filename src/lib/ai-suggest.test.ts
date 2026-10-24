@@ -87,6 +87,11 @@ describe("buildSuggestRequest", () => {
     expect(SUGGEST_SYSTEM).toMatch(/untrusted data/);
     expect(SUGGEST_SYSTEM).toMatch(/transfer, not an expense/);
     expect(SUGGEST_SYSTEM).toMatch(/Zelle from a person is usually Booth Rent/);
+    expect(SUGGEST_SYSTEM).toContain("Tax payments (IRS, Indiana DOR) go to a Taxes category if the list has one.");
+    expect(SUGGEST_SYSTEM).toContain(
+      "Use Owner Draw / Owner Contribution for money between the business and the owner, and Transfer Between Accounts only for the business's own accounts.",
+    );
+    expect(SUGGEST_SYSTEM).not.toMatch(/IRS estimated/);
   });
 });
 

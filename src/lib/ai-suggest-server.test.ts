@@ -9,7 +9,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
-import { SUGGEST_MAX_TOKENS, SUGGEST_MODEL, suggestCategories, type SuggestClient } from "./ai-suggest-server";
+import { SUGGEST_MAX_TOKENS, SUGGEST_MODEL, suggestCategories, suggestForGroups, type SuggestClient } from "./ai-suggest-server";
 
 const { transactions, categories } = schema;
 
@@ -50,7 +50,12 @@ async function add(description: string, amountCents: number, extra: Partial<type
   return r.id;
 }
 const suggestionOf = async (id: string) =>
-  (await db.select({ s: transactions.suggestedCategoryId, at: transactions.suggestedAt }).from(transactions).where(eq(transactions.id, id)))[0];
+  (
+    await db
+      .select({ s: transactions.suggestedCategoryId, at: transactions.suggestedAt })
+      .from(transactions)
+      .where(eq(transactions.id, id))
+  )[0];
 
 beforeAll(async () => {
   pg = new PGlite();
@@ -210,7 +215,11 @@ describe("suggestCategories", () => {
 
   it("swallows non-API errors too (DB failure)", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const broken = { select: () => { throw new Error("db down"); } } as unknown as Db;
+    const broken = {
+      select: () => {
+        throw new Error("db down");
+      },
+    } as unknown as Db;
     const r = await suggestCategories({ db: broken, client: fake().client });
     expect(r.error).toBe("unexpected_error");
   });
@@ -223,5 +232,173 @@ describe("suggestCategories", () => {
     expect(r).toEqual({ requested: 0, suggested: 0, batches: 0, skipped: "no_api_key" });
     expect(spy).not.toHaveBeenCalled();
     expect((await suggestionOf(a)).s).toBeNull();
+  });
+});
+
+describe("suggestCategories marks asked rows", () => {
+  it("sets suggested_at even when the model answers null, and does not ask again", async () => {
+    const a = await add("UNSURE VENDOR", -100);
+    const { client } = fake((groups) => ({ suggestions: groups.map((g) => ({ key: g.key, categoryId: null })) }));
+    const r = await suggestCategories({ db, client });
+    expect(r).toEqual({ requested: 1, suggested: 0, batches: 1 });
+    const row = await suggestionOf(a);
+    expect(row.s).toBeNull();
+    expect(row.at).toBeInstanceOf(Date);
+    const again = fake();
+    expect(await suggestCategories({ db, client: again.client })).toEqual({ requested: 0, suggested: 0, batches: 0 });
+    expect(again.calls).toHaveLength(0);
+  });
+});
+
+describe("suggestForGroups", () => {
+  const sentKeys = (call: Call) => {
+    const t = String((call.messages[0] as { content: string }).content);
+    return (JSON.parse(t.slice(t.indexOf("{"))).groups as Group[]).map((g) => g.key).sort();
+  };
+
+  it("keys results by the caller's group keys (multi-row group and one-off)", async () => {
+    const a1 = await add("AMAZON MKTPLACE 1", -1000);
+    const a2 = await add("AMAZON MKTPLACE 2", -2000);
+    const z = await add("ZELLE FROM BOB SMITH", 15000);
+    const { client, calls } = fake();
+    const r = await suggestForGroups({
+      db,
+      client,
+      groups: [
+        { key: "out|AMAZON MKTPLACE", ids: [a1, a2] },
+        { key: z, ids: [z] },
+      ],
+    });
+    expect(r).toEqual({
+      results: { "out|AMAZON MKTPLACE": { categoryId: supplies }, [z]: { categoryId: rent } },
+      suggestedRows: 3,
+    });
+    expect(calls).toHaveLength(1);
+    expect(sentKeys(calls[0])).toEqual([z, "out|AMAZON MKTPLACE"].sort());
+    for (const id of [a1, a2]) expect((await suggestionOf(id)).s).toBe(supplies);
+    expect((await suggestionOf(z)).s).toBe(rent);
+  });
+
+  it("does not re-send rows that were already asked; returns their stored suggestion", async () => {
+    const had = await add("ASKED SHOP", -300, { suggestedCategoryId: draw, suggestedAt: new Date("2026-01-01") });
+    const askedNull = await add("ASKED NOTHING", -300, { suggestedAt: new Date("2026-01-01") });
+    const fresh = await add("FRESH SHOP", -400);
+    const { client, calls } = fake();
+    const r = await suggestForGroups({
+      db,
+      client,
+      groups: [
+        { key: "g-had", ids: [had] },
+        { key: "g-null", ids: [askedNull] },
+        { key: "g-fresh", ids: [fresh] },
+      ],
+    });
+    expect(calls).toHaveLength(1);
+    expect(sentKeys(calls[0])).toEqual(["g-fresh"]);
+    expect(r).toMatchObject({
+      results: { "g-had": { categoryId: draw }, "g-null": { categoryId: null }, "g-fresh": { categoryId: supplies } },
+    });
+    expect((await suggestionOf(had)).s).toBe(draw);
+    // All asked: no model call at all, and no API key needed.
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    const none = await suggestForGroups({ db, groups: [{ key: "g-had", ids: [had] }] });
+    expect(none).toMatchObject({ results: { "g-had": { categoryId: draw } } });
+  });
+
+  it("marks null answers as asked (suggested_at set, no category)", async () => {
+    const a = await add("MYSTERY VENDOR", -100);
+    const { client } = fake((groups) => ({ suggestions: groups.map((g) => ({ key: g.key, categoryId: null })) }));
+    const r = await suggestForGroups({ db, client, groups: [{ key: "k", ids: [a] }] });
+    expect(r).toEqual({ results: { k: { categoryId: null } }, suggestedRows: 0 });
+    const row = await suggestionOf(a);
+    expect(row.s).toBeNull();
+    expect(row.at).toBeInstanceOf(Date);
+    const again = fake();
+    await suggestForGroups({ db, client: again.client, groups: [{ key: "k", ids: [a] }] });
+    expect(again.calls).toHaveLength(0);
+  });
+
+  it("guard: rows categorized or suggested while the model ran are left alone", async () => {
+    const sorted = await add("RACE ONE", -100);
+    const raced = await add("RACE TWO", -100);
+    const { client } = fake(async (groups) => {
+      await db.update(transactions).set({ categoryId: draw }).where(eq(transactions.id, sorted));
+      await db
+        .update(transactions)
+        .set({ suggestedCategoryId: draw, suggestedAt: new Date("2026-02-02") })
+        .where(eq(transactions.id, raced));
+      return { suggestions: groups.map((g) => ({ key: g.key, categoryId: supplies })) };
+    });
+    const r = await suggestForGroups({
+      db,
+      client,
+      groups: [
+        { key: "a", ids: [sorted] },
+        { key: "b", ids: [raced] },
+      ],
+    });
+    expect("error" in r).toBe(false);
+    const s = await suggestionOf(sorted);
+    expect(s.s).toBeNull();
+    expect(s.at).toBeNull();
+    expect((await suggestionOf(raced)).s).toBe(draw);
+  });
+
+  it("ignores ids that are already categorized", async () => {
+    const done = await add("DONE SHOP", -100, { categoryId: supplies });
+    const { client, calls } = fake();
+    const r = await suggestForGroups({ db, client, groups: [{ key: "x", ids: [done] }] });
+    expect(calls).toHaveLength(0);
+    expect(r).toMatchObject({ results: { x: { categoryId: null } } });
+    expect((await suggestionOf(done)).at).toBeNull();
+  });
+
+  it("an API error writes nothing and returns { error }", async () => {
+    const a = await add("SECRET DESCRIPTION VENDOR", -100);
+    const b = await add("OTHER VENDOR", -100);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const client: SuggestClient = {
+      messages: {
+        parse: async () => {
+          throw Anthropic.APIError.generate(
+            429,
+            { type: "error", error: { type: "rate_limit_error", message: "SECRET" } },
+            "SECRET",
+            new Headers(),
+          );
+        },
+      },
+    };
+    const r = await suggestForGroups({
+      db,
+      client,
+      groups: [
+        { key: "a", ids: [a] },
+        { key: "b", ids: [b] },
+      ],
+    });
+    expect(r).toEqual({ error: "api_error_429" });
+    for (const id of [a, b]) expect(await suggestionOf(id)).toEqual({ s: null, at: null });
+    expect(JSON.stringify(spy.mock.calls)).not.toContain("SECRET");
+  });
+
+  it("refusal and max_tokens write nothing and report an error", async () => {
+    const a = await add("REFUSED VENDOR", -100);
+    expect(await suggestForGroups({ db, client: fake(undefined, "refusal").client, groups: [{ key: "a", ids: [a] }] })).toEqual({
+      error: "model_refusal",
+    });
+    expect(
+      await suggestForGroups({ db, client: fake(undefined, "max_tokens").client, groups: [{ key: "a", ids: [a] }] }),
+    ).toEqual({
+      error: "model_max_tokens",
+    });
+    expect(await suggestionOf(a)).toEqual({ s: null, at: null });
+  });
+
+  it("missing key (no injected client) writes nothing and returns { error }", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    const a = await add("NO KEY VENDOR", -100);
+    expect(await suggestForGroups({ db, groups: [{ key: "a", ids: [a] }] })).toEqual({ error: "no_api_key" });
+    expect(await suggestionOf(a)).toEqual({ s: null, at: null });
   });
 });
