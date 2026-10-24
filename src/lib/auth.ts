@@ -1,6 +1,8 @@
 import "server-only";
+import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getDb, schema } from "@/db";
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
@@ -24,8 +26,20 @@ export async function deleteSession() {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
+/**
+ * Verifies the cookie signature, then loads the user and checks the session version, so deleted
+ * users and revoked sessions (`user:add` on an existing email bumps session_version) are rejected.
+ */
 export async function getSession(): Promise<SessionPayload | null> {
-  return verifySessionToken((await cookies()).get(SESSION_COOKIE)?.value);
+  const session = await verifySessionToken((await cookies()).get(SESSION_COOKIE)?.value);
+  if (!session) return null;
+  const db = await getDb();
+  const [user] = await db
+    .select({ name: schema.users.name, sessionVersion: schema.users.sessionVersion })
+    .from(schema.users)
+    .where(eq(schema.users.id, session.userId));
+  if (!user || user.sessionVersion !== session.sv) return null;
+  return { userId: session.userId, name: user.name, sv: user.sessionVersion };
 }
 
 /**
