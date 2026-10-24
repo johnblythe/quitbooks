@@ -22,7 +22,23 @@ export async function scriptDb(): Promise<{ db: Db; migrate: () => Promise<void>
     };
   }
 
-  const { migrate } = await import("drizzle-orm/neon-http/migrator");
   const db = drizzle(neon(url), { schema });
-  return { db, migrate: () => migrate(db, { migrationsFolder: "./drizzle" }), close: async () => {} };
+  return { db, migrate: () => migrateNeon(process.env.DATABASE_URL_UNPOOLED || url), close: async () => {} };
+}
+
+/**
+ * The neon-http migrator runs each statement as its own request, so a failed run can leave a
+ * half-applied schema. Migrate over a WebSocket Pool instead: all pending migrations run in one
+ * transaction, same as PGlite. Prefers the direct (unpooled) URL; Node 22's global WebSocket is used.
+ */
+async function migrateNeon(url: string) {
+  const { Pool } = await import("@neondatabase/serverless");
+  const { drizzle: drizzlePool } = await import("drizzle-orm/neon-serverless");
+  const { migrate } = await import("drizzle-orm/neon-serverless/migrator");
+  const pool = new Pool({ connectionString: url });
+  try {
+    await migrate(drizzlePool(pool, { schema }), { migrationsFolder: "./drizzle" });
+  } finally {
+    await pool.end();
+  }
 }

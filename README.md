@@ -21,17 +21,28 @@ npm run dev
 
 ## Deploy (Vercel + Neon)
 
-1. Import this repo in Vercel: https://vercel.com/new
-2. In the Vercel project, add the Neon integration (Storage → Neon). It sets `DATABASE_URL`.
-3. Add `SESSION_SECRET` in Project Settings → Environment Variables (32+ random characters).
-4. From your machine, with `DATABASE_URL` pointed at Neon in `.env`:
-   ```bash
-   npm run db:migrate
-   npm run db:seed
-   npm run user:add -- john@… "John" "…"
-   npm run user:add -- lauren@… "Lauren" "…"
-   ```
-5. Deploy. Sign in, set chairs and the BMO opening balance in Settings, add stylists, then import a CSV.
+Live setup: Vercel project `drippy-projects/quitbooks`, Neon project `quitbooks` (`snowy-queen-68891538`, aws-us-east-1).
+
+| Neon branch | Used by | Data |
+| --- | --- | --- |
+| `production` | Vercel Production | Real books |
+| `dev` | Vercel Preview, local testing | Disposable; fake roster via `fake:load` |
+
+- Vercel env, Production and Preview each: `DATABASE_URL` (pooled, `-pooler` host) and `SESSION_SECRET` (separate random values).
+- Migrations use the **direct** connection (`DATABASE_URL_UNPOOLED`) and run in one transaction (`scripts/db.ts`).
+
+Run scripts against a branch without writing secrets to disk (needs `npm i -g neon` and `neon login`; the repo is linked via `.neon`):
+
+```bash
+cs() { neon connection-string "$1" --database-name quitbooks --role-name quitbooks_owner $2; }
+DATABASE_URL="$(cs dev --pooled)" DATABASE_URL_UNPOOLED="$(cs dev)" npm run db:migrate
+DATABASE_URL="$(cs dev --pooled)" npm run db:seed
+DATABASE_URL="$(cs production --pooled)" npm run user:add -- john@… "John" "…"
+```
+
+Run migrations on `dev` first, then `production`. Pushing to `main` deploys Production; any other branch gets a Preview against `dev`.
+
+After the first deploy: sign in, set chairs and the BMO opening balance in Settings, add stylists, then import a CSV.
 
 ## Scripts
 
