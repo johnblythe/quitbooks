@@ -54,3 +54,9 @@ npm run dev
 - **Auto-categorizing** (`src/lib/categorize.ts`): money in whose description contains a stylist's match text becomes Booth Rent for that stylist; otherwise the first matching rule wins; otherwise it lands in the Inbox.
 - **Metrics** (`src/lib/metrics.ts`) are pure functions shared by the dashboard, reports and tests.
 - **Auth** is two hand-made accounts (scrypt-hashed passwords, signed session cookie). `src/proxy.ts` guards pages; every server action and route handler re-checks.
+
+## License
+
+Copyright (C) 2026 John Blythe.
+
+Licensed under the [GNU Affero General Public License v3.0](LICENSE). If you run a modified version as a network service, you must offer its users the source code of your version.

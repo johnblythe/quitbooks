@@ -31,7 +31,13 @@ export default function MorePage() {
           </li>
         ))}
       </ul>
-      <form action={logout} className="mt-6">
+      <p className="mt-6 px-1 text-xs text-ink-2">
+        Quitbooks is open source under the AGPL-3.0.{" "}
+        <a href="https://github.com/johnblythe/quitbooks" className="underline" target="_blank" rel="noreferrer">
+          Source code
+        </a>
+      </p>
+      <form action={logout} className="mt-4">
         <button type="submit" className="w-full rounded-2xl border border-line bg-surface px-4 py-3.5 text-left text-bad hover:bg-surface-2">
           Sign out
         </button>
