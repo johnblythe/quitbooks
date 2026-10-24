@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { applyRulesToUncategorized, categorizeGroup, categorizeTransaction } from "@/app/actions/transactions";
+import { applyRulesToUncategorized, categorizeGroup, categorizeTransaction, suggestInboxCategories } from "@/app/actions/transactions";
 import { BankBanner } from "@/components/bank-banner";
 import { Button, Card, Empty, Money, PageHeader, Skeleton, inputClass } from "@/components/ui";
 import type { TxRow } from "@/lib/data";
 import { INBOX_LIMIT, getCategories, getInboxRows, getStylists } from "@/lib/data";
+import { majoritySuggestion } from "@/lib/ai-suggest";
 import { suggestPattern } from "@/lib/categorize";
 import { formatDate } from "@/lib/dates";
 import { groupInbox, type InboxGroup } from "@/lib/inbox";
@@ -18,11 +19,18 @@ export default function InboxPage() {
         title="Inbox"
         subtitle="Transactions that still need a category."
         action={
-          <form action={applyRulesToUncategorized}>
-            <Button type="submit" variant="secondary">
-              Re-run rules
-            </Button>
-          </form>
+          <div className="flex flex-wrap justify-end gap-2">
+            <form action={suggestInboxCategories}>
+              <Button type="submit" variant="secondary" className="min-h-10">
+                ✨ Suggest categories
+              </Button>
+            </form>
+            <form action={applyRulesToUncategorized}>
+              <Button type="submit" variant="secondary" className="min-h-10">
+                Re-run rules
+              </Button>
+            </form>
+          </div>
         }
       />
       <Suspense fallback={<Skeleton rows={4} />}>
@@ -36,25 +44,37 @@ type Category = Awaited<ReturnType<typeof getCategories>>[number];
 type Stylist = Awaited<ReturnType<typeof getStylists>>[number];
 
 /** Category picker with the likelier kind first (money in -> income, money out -> expense). */
-function CategorySelect({ categories, direction }: { categories: Category[]; direction: "in" | "out" }) {
+function CategorySelect({
+  categories,
+  direction,
+  suggestedId,
+}: {
+  categories: Category[];
+  direction: "in" | "out";
+  /** An AI suggestion to preselect. Still needs the owner to press Sort/Save. */
+  suggestedId?: string | null;
+}) {
   const suggestedKind = direction === "in" ? "income" : "expense";
   return (
-    <select name="categoryId" required defaultValue="" className={inputClass} aria-label="Category">
-      <option value="" disabled>
-        Pick a category…
-      </option>
-      {[suggestedKind, suggestedKind === "income" ? "expense" : "income", "transfer"].map((kind) => (
-        <optgroup key={kind} label={kind === "income" ? "Money in" : kind === "expense" ? "Money out" : "Transfers"}>
-          {categories
-            .filter((c) => c.kind === kind)
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-        </optgroup>
-      ))}
-    </select>
+    <div className="min-w-0 flex-1">
+      {suggestedId ? <p className="mb-1 text-xs font-medium text-accent">✨ Suggested</p> : null}
+      <select name="categoryId" required defaultValue={suggestedId ?? ""} className={inputClass} aria-label="Category">
+        <option value="" disabled>
+          Pick a category…
+        </option>
+        {[suggestedKind, suggestedKind === "income" ? "expense" : "income", "transfer"].map((kind) => (
+          <optgroup key={kind} label={kind === "income" ? "Money in" : kind === "expense" ? "Money out" : "Transfers"}>
+            {categories
+              .filter((c) => c.kind === kind)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+          </optgroup>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -128,8 +148,16 @@ function GroupCard({
       <form action={categorizeGroup} className="mt-3 space-y-2">
         <input type="hidden" name="ids" value={group.ids.join(",")} />
         <input type="hidden" name="direction" value={group.direction} />
-        <div className="flex gap-2">
-          <CategorySelect categories={categories} direction={group.direction} />
+        <div className="flex items-end gap-2">
+          <CategorySelect
+            categories={categories}
+            direction={group.direction}
+            suggestedId={majoritySuggestion(
+              group.rows.map((r) => r.suggestedCategoryId),
+              categories,
+              group.direction,
+            )}
+          />
           <Button type="submit" className="min-h-10 shrink-0">
             Sort {group.count}
           </Button>
@@ -192,9 +220,13 @@ function OneOffCard({ tx, categories, stylists }: { tx: TxRow; categories: Categ
         <form action={categorizeTransaction} className="mt-3 space-y-2">
           <input type="hidden" name="id" value={tx.id} />
           <input type="hidden" name="direction" value={direction} />
-          <div className="flex gap-2">
-            <CategorySelect categories={categories} direction={direction} />
-            <Button type="submit" className="shrink-0">
+          <div className="flex items-end gap-2">
+            <CategorySelect
+              categories={categories}
+              direction={direction}
+              suggestedId={majoritySuggestion([tx.suggestedCategoryId], categories, direction)}
+            />
+            <Button type="submit" className="min-h-10 shrink-0">
               Save
             </Button>
           </div>

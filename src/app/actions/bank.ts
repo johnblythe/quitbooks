@@ -1,8 +1,10 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
+import { suggestCategories } from "@/lib/ai-suggest-server";
 import { requireUser } from "@/lib/auth";
 import { connectBank, disconnectBank, saveBankSelection, syncConnectionThrottled } from "@/lib/bank-sync-server";
 import { redactSecrets } from "@/lib/simplefin";
@@ -61,6 +63,7 @@ export async function saveBankSetupAction(_prev: BankState, formData: FormData):
       cutoverDate: input.data.cutoverDate,
     });
     const r = await syncConnectionThrottled({ db }, input.data.connectionId);
+    if (!r.throttled) after(() => suggestCategories({ db }));
     refresh();
     return syncMessage(r);
   } catch (e) {
@@ -73,7 +76,9 @@ export async function syncBankNowAction(_prev: BankState, formData: FormData): P
   const id = z.uuid().safeParse(formData.get("connectionId"));
   if (!id.success) return { error: "Unknown connection." };
   try {
-    const r = await syncConnectionThrottled({ db: await getDb() }, id.data);
+    const db = await getDb();
+    const r = await syncConnectionThrottled({ db }, id.data);
+    if (!r.throttled) after(() => suggestCategories({ db }));
     refresh();
     return syncMessage(r);
   } catch (e) {

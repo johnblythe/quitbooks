@@ -5,6 +5,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
+import { suggestCategories } from "@/lib/ai-suggest-server";
 import { requireUser } from "@/lib/auth";
 import { getCategorizer } from "@/lib/data";
 import { isIsoDate, monthOf } from "@/lib/dates";
@@ -189,5 +190,12 @@ export async function categorizeGroup(formData: FormData) {
 export async function applyRulesToUncategorized() {
   await requireUser();
   await applyRules();
+  refresh();
+}
+
+/** Inbox "Suggest categories": asks for suggestions on rows that don't have one yet. Never sorts anything. */
+export async function suggestInboxCategories() {
+  await requireUser();
+  await suggestCategories({ db: await getDb() });
   refresh();
 }

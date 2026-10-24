@@ -19,9 +19,10 @@
     "fake:load": "tsx scripts/fake-load.ts",
     "fake:score": "tsx scripts/fake-score.ts",
     "user:add": "tsx scripts/add-user.ts",
-    "bank:sync": "tsx scripts/bank-sync.ts"
+    "bank:sync": "tsx --conditions=react-server scripts/bank-sync.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@vercel/functions": "^3.10.3",
     "drizzle-orm": "^0.45.4",
     "jose": "^6.2.13",

@@ -9,6 +9,7 @@
  */
 import { eq } from "drizzle-orm";
 import * as schema from "../src/db/schema";
+import { suggestCategories } from "../src/lib/ai-suggest-server";
 import { connectBank, saveBankSelection, syncConnection } from "../src/lib/bank-sync-server";
 import { defaultCutover } from "../src/lib/bank-status";
 import { todayIso } from "../src/lib/dates";
@@ -45,6 +46,12 @@ async function main() {
         console.log(`  ${a.name}: balance ${a.balanceCents === null ? "n/a" : formatCents(a.balanceCents)} as of ${a.balanceDate?.toISOString() ?? "n/a"}`);
       }
     }
+    const s = await suggestCategories({ db });
+    console.log(
+      s.skipped
+        ? `Category suggestions skipped (${s.skipped}).`
+        : `Category suggestions: ${s.suggested} of ${s.requested} rows, ${s.batches} batch(es)${s.error ? `, error ${s.error}` : ""}.`,
+    );
     if (failed) process.exitCode = 1;
   } finally {
     await close();

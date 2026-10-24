@@ -1,6 +1,8 @@
 "use server";
 
+import { after } from "next/server";
 import { getDb, schema } from "@/db";
+import { suggestCategories } from "@/lib/ai-suggest-server";
 import { requireUser } from "@/lib/auth";
 import { parseBankCsv, type CsvMapping, type RowError } from "@/lib/csv";
 import { BMO_MAPPING_NAME, getCategorizer } from "@/lib/data";
@@ -172,6 +174,8 @@ export async function commitImport(
       links: confirmed,
       categorizer,
     });
+    // Outside the import transaction (already committed) and after the response is sent.
+    if (out.inserted > 0) after(() => suggestCategories({ db }));
     return {
       ok: true,
       inserted: out.inserted,

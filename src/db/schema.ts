@@ -143,6 +143,9 @@ export const transactions = pgTable(
     /** Set on rows that came from (or were matched to) a bank feed transaction. */
     bankAccountId: uuid("bank_account_id").references(() => bankAccounts.id, { onDelete: "set null" }),
     externalId: text("external_id"),
+    /** AI-suggested category for an uncategorized row. Never applied automatically. */
+    suggestedCategoryId: uuid("suggested_category_id").references(() => categories.id, { onDelete: "set null" }),
+    suggestedAt: timestamp("suggested_at", { withTimezone: true }),
     createdBy: uuid("created_by").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
