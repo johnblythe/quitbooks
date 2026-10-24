@@ -82,11 +82,14 @@ export async function addRule(formData: FormData) {
       pattern: z.string().trim().min(3).max(100),
       categoryId: z.uuid(),
       direction: z.enum(["any", "in", "out"]),
+      sortInbox: z.string().optional(),
     })
     .safeParse(Object.fromEntries(formData));
   if (!input.success) return;
+  const { sortInbox, ...values } = input.data;
   const db = await getDb();
-  await db.insert(rules).values(input.data);
+  await db.insert(rules).values(values);
+  if (sortInbox) await applyRules();
   refresh();
 }
 

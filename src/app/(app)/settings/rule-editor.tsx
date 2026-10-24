@@ -86,7 +86,8 @@ function RuleForm({
   onCancel?: () => void;
 }) {
   const [pattern, setPattern] = useState(rule?.pattern ?? "");
-  const [direction, setDirection] = useState<Direction>(rule?.direction ?? "any");
+  // New rules default to money out: almost every rule is a vendor.
+  const [direction, setDirection] = useState<Direction>(rule?.direction ?? "out");
   const editing = !!rule;
 
   async function submit(formData: FormData) {
@@ -156,12 +157,16 @@ function RuleForm({
         </div>
       </fieldset>
       <TestPanel pattern={pattern} direction={direction} />
-      {editing ? (
-        <label className="flex min-h-10 items-center gap-2 text-sm">
-          <input type="checkbox" name="sortInbox" value="1" className="h-4 w-4 accent-[var(--accent)]" />
-          Also sort matching Inbox items
-        </label>
-      ) : null}
+      <label className="flex min-h-10 items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="sortInbox"
+          value="1"
+          defaultChecked={!editing}
+          className="h-4 w-4 accent-[var(--accent)]"
+        />
+        Also sort matching Inbox items
+      </label>
       <div className="flex items-center gap-2">
         <Button type="submit" variant={editing ? "primary" : "secondary"} className="min-h-10">
           {editing ? "Save" : "Add rule"}
