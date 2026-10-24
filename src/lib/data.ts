@@ -113,6 +113,15 @@ export async function getUncategorized(limit = 100) {
     .limit(limit);
 }
 
+/** Max rows the grouped Inbox loads at once. */
+export const INBOX_LIMIT = 2000;
+
+/** Every uncategorized row for the grouped Inbox (capped), plus the true total. */
+export async function getInboxRows(limit = INBOX_LIMIT) {
+  const [rows, total] = await Promise.all([getUncategorized(limit), countUncategorized()]);
+  return { rows, total, capped: total > rows.length };
+}
+
 export async function countUncategorized(): Promise<number> {
   await connection();
   const db = await getDb();

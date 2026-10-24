@@ -6,12 +6,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
 import { requireUser } from "@/lib/auth";
-import { matchRule, norm } from "@/lib/categorize";
-import { getBoothRentCategoryId, getCategorizer } from "@/lib/data";
+import { getCategorizer } from "@/lib/data";
 import { isIsoDate, monthOf } from "@/lib/dates";
+import { chunk } from "@/lib/inbox";
 import { parseAmountToCents } from "@/lib/money";
+import { IN_ARRAY_CHUNK, applyRules, rememberPattern } from "@/lib/rules-server";
 
-const { transactions, rules, stylists } = schema;
+const { transactions } = schema;
 
 export type TxFormState = { error?: string } | undefined;
 
@@ -125,73 +126,64 @@ export async function categorizeTransaction(formData: FormData) {
       .select({ date: transactions.date, amountCents: transactions.amountCents, description: transactions.description })
       .from(transactions)
       .where(eq(transactions.id, id));
-    // Only remember patterns that actually match this transaction (same semantics as rules).
-    const matchesSelf =
-      !!tx &&
-      matchRule(tx, [{ id: "self", pattern, categoryId, direction: "any", priority: 0 }]) !== null;
-    if (matchesSelf) {
-      const boothRentId = await getBoothRentCategoryId();
-      if (stylistId && boothRentId && categoryId === boothRentId) {
-        // Booth rent: teach the stylist's match text instead of creating a rule.
-        const [st] = await db.select().from(stylists).where(eq(stylists.id, stylistId));
-        if (st) {
-          const split = (t: string | null) =>
-            (t ?? "")
-              .split(/[,;\n]/)
-              .map((x) => x.trim())
-              .filter(Boolean);
-          // No explicit match text means the full name was the implicit term; keep it.
-          const existing = split(st.matchText);
-          const base = existing.length ? existing : split(st.name);
-          if (!base.some((t) => norm(t) === norm(pattern))) {
-            await db
-              .update(stylists)
-              .set({ matchText: [...base, pattern].join(", ") })
-              .where(eq(stylists.id, stylistId));
-          }
-        }
-      } else {
-        await db.insert(rules).values({ pattern, categoryId, direction: direction ?? "any" });
-      }
-      await applyRules();
-    }
+    const saved = await rememberPattern({
+      pattern,
+      categoryId,
+      stylistId,
+      direction: direction ?? "any",
+      samples: tx ? [tx] : [],
+    });
+    if (saved) await applyRules();
   }
   refresh();
 }
 
-/** Re-runs stylist matching and rules over everything still uncategorized. Returns how many were sorted. */
-async function applyRules(): Promise<number> {
-  const db = await getDb();
-  const categorizer = await getCategorizer();
-  const open = await db
-    .select({
-      id: transactions.id,
-      date: transactions.date,
-      amountCents: transactions.amountCents,
-      description: transactions.description,
+/**
+ * Inbox group sort: one category (and optional stylist) for many rows at once. Only rows still
+ * uncategorized are touched, so it never clobbers something categorized in the meantime.
+ */
+export async function categorizeGroup(formData: FormData) {
+  await requireUser();
+  const input = z
+    .object({
+      ids: z
+        .string()
+        .transform((v) => v.split(",").filter(Boolean))
+        .pipe(z.array(z.uuid()).min(1).max(2000)),
+      categoryId: z.uuid(),
+      stylistId: optionalId,
+      remember: z.string().optional(),
+      pattern: z.string().trim().max(100).optional(),
+      direction: z.enum(["in", "out"]),
     })
-    .from(transactions)
-    .where(isNull(transactions.categoryId));
+    .safeParse(Object.fromEntries(formData));
+  if (!input.success) return;
+  const { ids, categoryId, remember, pattern, direction } = input.data;
+  // Stylists only make sense for money in.
+  const stylistId = direction === "in" ? input.data.stylistId : null;
 
-  // Group updates by (category, stylist) so it's a handful of queries, not one per row.
-  const groups = new Map<string, { categoryId: string; stylistId: string | null; ids: string[] }>();
-  for (const tx of open) {
-    const r = categorizer(tx);
-    if (!r.categoryId) continue;
-    const key = `${r.categoryId}|${r.stylistId ?? ""}`;
-    const g = groups.get(key) ?? { categoryId: r.categoryId, stylistId: r.stylistId, ids: [] };
-    g.ids.push(tx.id);
-    groups.set(key, g);
-  }
-  let count = 0;
-  for (const g of groups.values()) {
+  const db = await getDb();
+  for (const part of chunk(ids, IN_ARRAY_CHUNK)) {
     await db
       .update(transactions)
-      .set({ categoryId: g.categoryId, stylistId: g.stylistId, updatedAt: new Date() })
-      .where(and(inArray(transactions.id, g.ids), isNull(transactions.categoryId)));
-    count += g.ids.length;
+      .set({ categoryId, stylistId, updatedAt: new Date() })
+      .where(and(inArray(transactions.id, part), isNull(transactions.categoryId)));
   }
-  return count;
+
+  if (remember && pattern && pattern.length >= 3) {
+    const samples: { date: string; amountCents: number; description: string }[] = [];
+    for (const part of chunk(ids, IN_ARRAY_CHUNK)) {
+      samples.push(
+        ...(await db
+          .select({ date: transactions.date, amountCents: transactions.amountCents, description: transactions.description })
+          .from(transactions)
+          .where(inArray(transactions.id, part))),
+      );
+    }
+    await rememberPattern({ pattern, categoryId, stylistId, direction, samples });
+  }
+  await applyRules();
+  refresh();
 }
 
 export async function applyRulesToUncategorized() {
