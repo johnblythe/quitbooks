@@ -53,24 +53,22 @@ Done:
   - transactional migrations;
   - Vercel project `drippy-projects/quitbooks`.
 - Fake data: `fake:bmo` / `fake:load` / `fake:score` / `db:wipe`, plus 12-month fixtures in `fixtures/`.
-- 216 unit tests. A browser click-through on the preview (against `dev`) passed for import, linking, Inbox, rules and headers. **Not yet checked at 390 px wide**: Chrome on macOS won't resize below 500 px, so use a phone or DevTools device mode.
+- Bank sync (SimpleFIN Bridge): one-time link in Settings, daily Vercel Cron plus "Sync now", dedupe by bank transaction id, manual-entry linking, dashboard reconciliation line, connection-attention banner, CSV cutover guard, Access URL encrypted with AES-256-GCM.
+- AI category suggestions (Claude Haiku 5.5): lazy per group via `POST /api/inbox/suggest`, pre-fill the picker and are never auto-applied, precomputed after bank sync.
+- 339 unit tests. A browser click-through on the preview (against `dev`) passed for import, linking, Inbox, rules, headers and AI suggestions. **Not yet checked at 390 px wide** beyond John's eyeball ("good enough"): Chrome on macOS won't resize below 500 px, so use a phone or DevTools device mode.
 
 Review findings (P0/P1/P2 with file:line): `docs/reviews/2026-10-24-logic.md`, `docs/reviews/2026-10-24-security.md`.
 
 Data is not precious yet: wiping and re-importing is fine until John says otherwise, so don't contort a fix to preserve existing rows.
 
 Next up, in order:
-1. **Automatic bank sync from BMO (US) business checking.** This is the go/no-go for the whole app. Lauren's bar is QuickBooks Online's bank feed: transactions arrive by themselves and reconcile. Without that, the app isn't worth switching to.
-   - Pick a provider (research is in progress).
-   - Build a `bank_sync` source: a one-time link in Settings, then a daily Vercel Cron plus "Sync now".
-   - Dedupe by the provider's transaction id, then run `categorize()`, manual-entry linking and the Inbox.
-   - Store the provider-reported balance and show "BMO says $X · books say $Y".
-   - Cut over cleanly: the feed is the source of truth from the link date on. Block CSV imports that overlap it, because provider descriptions won't match BMO CSV text and the hash dedupe would miss them.
+1. **Real BMO link (John):** the $1.50 SimpleFIN test, ideally with a view-only BMO user. Confirm which BMO login the salon uses (Digital Banking or OLBB).
 2. **Go live**:
-   - merge `prelaunch` → `main` (deploys Production);
-   - John's and Lauren's logins via `user:add` against the `production` branch;
-   - a phone-width check;
-   - one guided Inbox session on real data.
+   - merge `bank-sync` → `main` (deploys Production);
+   - production logins via `user:add` against the `production` Neon branch;
+   - link the real BMO on Production (not Preview);
+   - first sync and a reconciliation check;
+   - one guided Inbox session with Lauren.
 3. **Everything else**:
    - undo an import (by `import_batch_id`);
    - split a transaction;
@@ -82,4 +80,4 @@ Next up, in order:
 Known caveats:
 - Expected weekly/biweekly rent counts due dates from the stylist's start date; if real payment days differ, the month boundary can shift one payment between months. Fine for now; revisit if it confuses Lauren.
 - Cash runway needs an opening balance in Settings; balance = opening + everything recorded since that date.
-- `npm audit --omit=dev` reports 4 highs. They all come from `zod` 4.1.11, pinned inside `@vercel/functions` → `@vercel/oidc` → `@vercel/cli-config`, which only parses local CLI config. The fix is a `package.json` override (`"overrides": {"@vercel/cli-config": {"zod": "$zod"}}`) plus a lockfile refresh. Not applied yet; needs John's OK.
+- The test URL is the stable branch alias (e.g. `quitbooks-git-bank-sync-drippy-projects.vercel.app`), where John stays signed in. Don't hand out per-deploy URLs.

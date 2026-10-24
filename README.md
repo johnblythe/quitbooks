@@ -44,6 +44,14 @@ Run migrations on `dev` first, then `production`. Pushing to `main` deploys Prod
 
 After the first deploy: sign in, set chairs and the BMO opening balance in Settings, add stylists, then import a CSV.
 
+### Bank sync
+
+- Vercel env, Production and Preview: `BANK_TOKEN_KEY` (encrypts the stored SimpleFIN Access URL), `CRON_SECRET`, and `ANTHROPIC_API_KEY` (optional; enables AI category suggestions), plus the existing `DATABASE_URL` / `SESSION_SECRET`. See `.env.example`.
+- **Never rotate `BANK_TOKEN_KEY` casually.** The stored connection can't be decrypted with a new key, so you'd have to re-link.
+- To link: in SimpleFIN Bridge, create a setup token, paste it in Settings → Bank connection, then pick the account and a start date.
+- A Vercel Cron syncs daily at 11:00 UTC; "Sync now" in Settings runs it on demand. The cron is a no-op until a bank is linked.
+- Pending items: the feed only imports posted transactions.
+
 ## Scripts
 
 | Script | What it does |
@@ -59,6 +67,7 @@ After the first deploy: sign in, set chairs and the BMO opening balance in Setti
 | `npm run fake:bmo` | Generate a fabricated BMO CSV plus a `.truth.json` (see flags in `scripts/fake-bmo-csv.ts`; committed samples live in `fixtures/`) |
 | `npm run fake:load -- <truth.json>` | Load the fake roster, chair count and opening balance (PGlite only unless `--yes`). Import the CSV through the app |
 | `npm run fake:score -- <csv> <truth.json>` | Score the importer and categorizer against a truth file |
+| `npm run bank:sync` | Run a bank sync from the command line (same as the cron) |
 | `npm run user:add` | Create or reset a login |
 
 ## How it works
