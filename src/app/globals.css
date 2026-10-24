@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/* L Marie palette: warm cream, espresso ink, muted rose accent. */
+:root {
+  --bg: #faf6f1;
+  --surface: #ffffff;
+  --surface-2: #f3ece4;
+  --ink: #2b211c;
+  --ink-2: #6b5d54;
+  --line: #e7ddd2;
+  --accent: #9a5b5b;
+  --accent-ink: #ffffff;
+  --good: #3f7a55;
+  --good-bg: #e6f1e9;
+  --bad: #b04a3c;
+  --bad-bg: #f8e5e1;
+  --warn: #9a6a12;
+  --warn-bg: #f8eed8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171311;
+    --surface: #211b18;
+    --surface-2: #2b2420;
+    --ink: #f3ebe4;
+    --ink-2: #b3a59a;
+    --line: #3a312b;
+    --accent: #d39a95;
+    --accent-ink: #1d1513;
+    --good: #7cc395;
+    --good-bg: #1d2e23;
+    --bad: #ec8f80;
+    --bad-bg: #3a211d;
+    --warn: #e2b660;
+    --warn-bg: #332816;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-good: var(--good);
+  --color-good-bg: var(--good-bg);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--bad-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, ui-serif, serif;
+}
+
+html {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 1;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px; /* prevents iOS zoom on focus */
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff;
+    color: #000;
+  }
+}
