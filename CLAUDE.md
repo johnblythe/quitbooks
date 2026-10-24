@@ -38,17 +38,26 @@ Done:
 - Reports: P&L for presets or custom range, summary CSV, detailed CSV, print / save as PDF
 - 52 unit tests across money, dates, CSV, categorization, metrics
 
-Next up, in priority order:
-1. **Get a real BMO CSV export** and check `detectMapping` against it, especially whether Zelle sender names appear in the description or a separate column (PRD open question). Add a fixture test with the real headers (fake the rows).
-2. **Deploy**: Vercel + Neon integration, run migrations and seed against Neon, create John's and Lauren's logins. Confirm the Neon HTTP driver works for every action (it has no interactive transactions; nothing currently needs one).
-3. **Inbox bulk actions**: select several rows → one category. "Remember" currently matches the suggested pattern; consider showing how many other Inbox items it would catch before saving.
-4. **Rule editing** (only add/delete today) and a "test this rule" preview.
-5. **Split a transaction** across categories (e.g. one Amazon order = supplies + cleaning).
-6. **Undo an import** (delete by `import_batch_id`) from the Recent imports list.
-7. **Login rate limiting** (e.g. a simple attempts table or Vercel KV) and a password change screen.
-8. **QuickBooks history**: decide how far back to import (open question). QuickBooks can export transactions to CSV; the importer may just work with a mapping.
-9. **PWA polish**: app icon, manifest, add-to-home-screen.
-10. Stretch: bank sync (Plaid / Teller / SimpleFIN, see PRD). Add a `bank_sync` source writer that reuses `categorize()` and the dedupe hash.
+Review findings (P0/P1/P2 with file:line): `docs/reviews/2026-10-24-logic.md`, `docs/reviews/2026-10-24-security.md`.
+
+Data is not precious yet: wiping and re-importing is fine until John says otherwise, so don't contort a fix to preserve existing rows.
+
+Next up, in order:
+1. **Fabricated BMO data**: a seeded generator for N months of a booth-rent salon (Zelle rent, salon expenses, owner draws, realistic traps), in each plausible BMO export shape. Fixture tests against the importer. Replaces waiting on a real export; check against a real one when it turns up.
+2. **Neon + deploy**: Vercel + Neon, transactional migrations (review security P1-4), seed, load the fabricated data, John's and Lauren's logins.
+3. **Categorization** (review logic P1-1, P1-3, P1-4): stylist matching on whole words and active dates, contiguous "remember" patterns, Booth Rent remember tags the stylist. Plus Inbox bulk actions, "would catch N" preview, rule editing and a "test this rule" preview.
+4. **Hardening**:
+   - Import integrity: manual-vs-import double count (logic P0-1), a mapping-independent hash (logic P1-2), atomic commit, visible parse errors, 4 MB body limit.
+   - Auth: open redirect, login rate limiting (an attempts table; Vercel KV no longer exists), stored-hash validation.
+   - `.env.example`.
+5. **Everything else**:
+   - undo an import (by `import_batch_id`);
+   - split a transaction;
+   - password change screen;
+   - QuickBooks history;
+   - PWA polish;
+   - review P2s and product calls (runway vs owner draws, rent carry-forward);
+   - stretch: bank sync (Plaid / Teller / SimpleFIN; a `bank_sync` writer reusing `categorize()` and the dedupe hash).
 
 Known caveats:
 - Expected weekly/biweekly rent counts due dates from the stylist's start date; if real payment days differ, the month boundary can shift one payment between months. Fine for now; revisit if it confuses Lauren.
