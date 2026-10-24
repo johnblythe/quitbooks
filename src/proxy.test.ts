@@ -29,6 +29,7 @@ describe("proxy matcher", () => {
     "/stylists/x.png",
     "/transactions/x.svg",
     "/reports/export",
+    "/api/inbox/suggest",
     "/loginx",
     "/api/cron/bank-sync/",
     "/api/cron/bank-sync/x",

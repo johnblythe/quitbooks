@@ -5,7 +5,6 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDb, schema } from "@/db";
-import { suggestForGroups, type SuggestGroupsResult } from "@/lib/ai-suggest-server";
 import { requireUser } from "@/lib/auth";
 import { getCategorizer } from "@/lib/data";
 import { isIsoDate, monthOf } from "@/lib/dates";
@@ -191,20 +190,4 @@ export async function applyRulesToUncategorized() {
   await requireUser();
   await applyRules();
   refresh();
-}
-
-const suggestGroupsInput = z
-  .array(z.object({ key: z.string().min(1).max(200), ids: z.array(z.uuid()).min(1).max(500) }))
-  .min(1)
-  .max(12);
-
-/**
- * Inbox lazy suggestions: one model request for a few groups. Stores suggestions only (never sorts)
- * and does not refresh the page; the client fills each card in from the return value.
- */
-export async function suggestGroupsAction(groups: { key: string; ids: string[] }[]): Promise<SuggestGroupsResult> {
-  await requireUser();
-  const parsed = suggestGroupsInput.safeParse(groups);
-  if (!parsed.success) return { error: "invalid_input" };
-  return suggestForGroups({ db: await getDb(), groups: parsed.data });
 }

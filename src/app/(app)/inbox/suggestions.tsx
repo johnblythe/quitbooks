@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { suggestGroupsAction } from "@/app/actions/transactions";
 import { Button, inputClass } from "@/components/ui";
 import {
   CONCURRENCY,
@@ -65,6 +64,8 @@ export function SuggestionsProvider({
   }, [items]);
   const mounted = useRef(false);
 
+  const controllers = useRef(new Set<AbortController>());
+
   const runChunks = useCallback((keyChunks: string[][], alive: () => boolean) => {
     const idsByKey = new Map(itemsRef.current.map((i) => [i.key, i.ids]));
     let next = 0;
@@ -73,10 +74,20 @@ export function SuggestionsProvider({
         const keys = keyChunks[next++].filter((k) => idsByKey.has(k));
         if (!keys.length) continue;
         let outcome: ChunkOutcome;
+        const ac = new AbortController();
+        controllers.current.add(ac);
         try {
-          outcome = await suggestGroupsAction(keys.map((key) => ({ key, ids: idsByKey.get(key)! })));
+          const res = await fetch("/api/inbox/suggest", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(keys.map((key) => ({ key, ids: idsByKey.get(key)! }))),
+            signal: ac.signal,
+          });
+          outcome = res.ok ? ((await res.json()) as ChunkOutcome) : { error: "request_failed" };
         } catch {
           outcome = { error: "request_failed" };
+        } finally {
+          controllers.current.delete(ac);
         }
         if (!alive()) return;
         dispatch({ type: "settle", keys, outcome });
@@ -89,11 +100,14 @@ export function SuggestionsProvider({
   useEffect(() => {
     mounted.current = true;
     const run = { stopped: false };
+    const inflight = controllers.current;
     const keys = itemsRef.current.filter((i) => i.needsAsking).map((i) => i.key);
     runChunks(planChunks(keys), () => !run.stopped);
     return () => {
       run.stopped = true;
       mounted.current = false;
+      for (const ac of inflight) ac.abort();
+      inflight.clear();
     };
   }, [runChunks]);
 
