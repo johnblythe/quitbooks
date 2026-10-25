@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { getCategorizer } from "@/lib/data";
 import { isIsoDate, monthOf } from "@/lib/dates";
 import { chunk } from "@/lib/inbox";
 import { parseAmountToCents } from "@/lib/money";
+import { inInbox } from "@/lib/inbox-where";
 import { IN_ARRAY_CHUNK, applyRules, rememberPattern } from "@/lib/rules-server";
 
 const { transactions } = schema;
@@ -83,10 +84,21 @@ export async function updateTransaction(_prev: TxFormState, formData: FormData):
   const { date, amountCents, description, note, categoryId, stylistId } = result.data;
 
   const db = await getDb();
-  await db
-    .update(transactions)
-    .set({ date, amountCents, description, note, categoryId, stylistId, updatedAt: new Date() })
+  // A split row keeps its amount (the lines must keep adding up to it) and has no category of its own.
+  const [current] = await db
+    .select({ isSplit: transactions.isSplit, amountCents: transactions.amountCents })
+    .from(transactions)
     .where(eq(transactions.id, id.data));
+  if (!current) return { error: "That transaction no longer exists." };
+  if (current.isSplit && current.amountCents !== amountCents) {
+    return { error: "This transaction is split, so its amount can't change. Remove the split first." };
+  }
+  const updated = await db
+    .update(transactions)
+    .set({ date, amountCents, description, note, ...(current.isSplit ? {} : { categoryId, stylistId }), updatedAt: new Date() })
+    .where(and(eq(transactions.id, id.data), eq(transactions.isSplit, current.isSplit)))
+    .returning({ id: transactions.id });
+  if (!updated.length) return { error: "This transaction changed while you were editing. Reload and try again." };
   redirect(`/transactions?month=${monthOf(date)}`);
 }
 
@@ -116,10 +128,11 @@ export async function categorizeTransaction(formData: FormData) {
   const { id, categoryId, stylistId, remember, pattern, direction } = input.data;
 
   const db = await getDb();
+  // Never on a split row: its lines carry the categories.
   await db
     .update(transactions)
     .set({ categoryId, stylistId, updatedAt: new Date() })
-    .where(eq(transactions.id, id));
+    .where(and(eq(transactions.id, id), eq(transactions.isSplit, false)));
 
   if (remember && pattern && pattern.length >= 3) {
     const [tx] = await db
@@ -167,7 +180,7 @@ export async function categorizeGroup(formData: FormData) {
     await db
       .update(transactions)
       .set({ categoryId, stylistId, updatedAt: new Date() })
-      .where(and(inArray(transactions.id, part), isNull(transactions.categoryId)));
+      .where(and(inArray(transactions.id, part), inInbox()));
   }
 
   if (remember && pattern && pattern.length >= 3) {

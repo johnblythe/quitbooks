@@ -5,6 +5,7 @@ import { MonthSwitcher, resolveMonth } from "@/components/month-switcher";
 import { ButtonLink, Card, Empty, Money, PageHeader, Pill, Skeleton } from "@/components/ui";
 import { getTransactionsForMonth, requestToday } from "@/lib/data";
 import { formatDate, monthOf } from "@/lib/dates";
+import { inOutTotals } from "@/lib/ledger";
 
 export const metadata: Metadata = { title: "Transactions" };
 
@@ -32,10 +33,12 @@ export default function TransactionsPage({ searchParams }: { searchParams: Promi
 async function TransactionList({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const current = monthOf(await requestToday());
   const month = resolveMonth((await searchParams).month, current);
-  const rows = await getTransactionsForMonth(month);
+  const { rows, lines } = await getTransactionsForMonth(month);
 
-  const moneyIn = rows.filter((r) => r.amountCents > 0 && r.categoryKind !== "transfer").reduce((s, r) => s + r.amountCents, 0);
-  const moneyOut = rows.filter((r) => r.amountCents < 0 && r.categoryKind !== "transfer").reduce((s, r) => s - r.amountCents, 0);
+  // Totals work on ledger lines, so a split's transfer portion stays out and net deposits show their fees.
+  const { moneyIn, moneyOut } = inOutTotals(
+    lines.map((l) => ({ amountCents: l.amountCents, kind: (l.split ?? l.tx).categoryKind ?? null })),
+  );
 
   // Group by date for a phone-friendly list.
   const byDate = new Map<string, typeof rows>();
@@ -78,7 +81,13 @@ async function TransactionList({ searchParams }: { searchParams: Promise<{ month
                     <span className="min-w-0">
                       <span className="block truncate text-sm">{tx.description}</span>
                       <span className="mt-0.5 flex flex-wrap gap-1.5 text-xs text-ink-2">
-                        {tx.categoryName ? <span>{tx.categoryName}</span> : <Pill tone="warn">Needs category</Pill>}
+                        {tx.isSplit ? (
+                          <Pill>Split · {tx.splitCount}</Pill>
+                        ) : tx.categoryName ? (
+                          <span>{tx.categoryName}</span>
+                        ) : (
+                          <Pill tone="warn">Needs category</Pill>
+                        )}
                         {tx.stylistName ? <span>· {tx.stylistName}</span> : null}
                       </span>
                     </span>
