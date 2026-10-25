@@ -36,6 +36,13 @@ All notable changes to this project are documented here, in the [Keep a Changelo
 - Stronger scrypt parameters; legacy hashes still verify.
 - `user:add` prompts for the password, hidden; `db:seed` is keyed on system categories.
 - The proxy matcher is anchored, and security headers are added.
+- Bank feed (#1):
+  - disconnecting keeps the bank accounts (detached), so reconnecting the same SimpleFIN accounts re-attaches them;
+  - a full re-fetch can start at most a year back (SimpleFIN allows 24 requests a day);
+  - SimpleFIN errors about other connections are shown as amber warnings and no longer fail the sync;
+  - bank feed rows can't be deleted; categorize them instead.
+- `db:wipe` also makes the bank feed's next sync re-fetch from its start date (#1).
+- Background AI suggestions run 16 groups per request with `max_tokens` 8000; Haiku 5.5 thinks by default and thinking counts toward the cap (#1).
 
 ### Fixed
 - A manual entry plus the same CSV row counted twice (review P0-1).
@@ -45,3 +52,17 @@ All notable changes to this project are documented here, in the [Keep a Changelo
 - The CSV commit wasn't atomic, and the server action body limit was effectively 1 MB.
 - The Inbox picker didn't show its suggestion until a page reload.
 - `npm audit` production dependencies went from 4 high to 0 (nested `zod` override).
+- PR #1 review fixes:
+  - an earlier start date, or a newly included account, is now fetched from the start date;
+  - disconnect then reconnect no longer duplicates feed rows;
+  - a start date on or before the last CSV row is rejected, with both dates named;
+  - the CSV guard also covers feed rows dated before a start date that was moved later;
+  - connecting checks `BANK_TOKEN_KEY` before spending the one-time setup token, and saves the link before loading accounts, so a failed account fetch can be retried;
+  - a start date in the future no longer reports every account missing;
+  - deleted feed rows no longer come back on the next sync (they can't be deleted);
+  - pages now re-check the session on every request, so a revoked session or deleted user can't read pages for up to 30 days;
+  - parallel login attempts can no longer get past the 5-per-IP / 20-per-email limit;
+  - background AI suggestion batches that hit `max_tokens` are split and retried, and a failing batch no longer blocks the others;
+  - large Inbox groups (over 500 rows) no longer get a 400 from the suggestion route;
+  - Zelle and transfer patterns keep the payer's name, so two stylists' payments no longer share one Inbox group;
+  - "Remember" no longer leaves a bare first name as a stylist match term when the pattern has a comma.
