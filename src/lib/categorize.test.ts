@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  addStylistTerm,
   categorize,
   matchRule,
   matchStylist,
   norm,
+  stylistTerms,
   suggestPattern,
   STYLIST_GRACE_AFTER_END_DAYS,
   STYLIST_GRACE_BEFORE_START_DAYS,
@@ -140,6 +142,28 @@ describe("suggestPattern", () => {
   it("returns empty when too short", () => {
     expect(suggestPattern("12 34 A")).toBe("");
   });
+  it("keeps the payer of a Zelle payment, so two stylists don't share a pattern", () => {
+    const dana = suggestPattern("ONLINE TRANSFER ZELLE PAYMENT FROM DANA FISK");
+    const ann = suggestPattern("ONLINE TRANSFER ZELLE PAYMENT FROM ANN WHITAKER");
+    expect(dana).toContain("DANA FISK");
+    expect(ann).toContain("ANN WHITAKER");
+    expect(dana).not.toBe(ann);
+    expect(dana).toBe("ZELLE PAYMENT FROM DANA FISK");
+  });
+  it("doesn't drop a payee that looks like CITY ST", () => {
+    expect(suggestPattern("ONLINE PAYMENT TO ACME CO")).toContain("ACME CO");
+  });
+  it("uses the last FROM/TO and stops the payee at noise", () => {
+    expect(suggestPattern("ZELLE PAYMENT RECEIVED · FROM DANA FISK")).toBe("FROM DANA FISK");
+    expect(suggestPattern("ZELLE FROM JANE DOE 8234 REF")).toBe("ZELLE FROM JANE DOE");
+    expect(suggestPattern("ONLINE BANKING TRANSFER TO SAV 8847")).toBe("ONLINE BANKING TRANSFER TO SAV");
+  });
+  it("caps a long payee at 5 words", () => {
+    expect(suggestPattern("TRANSFER TO ALPHA BRAVO CHARLIE DELTA ECHO FOXTROT")).toBe("ALPHA BRAVO CHARLIE DELTA ECHO");
+  });
+  it("falls back to the longest run when FROM/TO isn't followed by a usable word", () => {
+    expect(suggestPattern("SALLY BEAUTY SUPPLY TRANSFER TO 1234")).toBe("SALLY BEAUTY SUPPLY TRANSFER TO");
+  });
   it("is empty-or-matching for every fixture description", () => {
     const truth = JSON.parse(readFileSync("fixtures/bmo-fake-12mo-split.truth.json", "utf8")) as {
       rows: { amountCents: number; date: string; description: string }[];
@@ -150,5 +174,28 @@ describe("suggestPattern", () => {
       expect(p === "" || norm(r.description).includes(p)).toBe(true);
       if (p) expect(matchRule(r, [{ id: "p", pattern: p, categoryId: "c", direction: "any", priority: 1 }])).not.toBeNull();
     }
+  });
+});
+
+describe("addStylistTerm", () => {
+  const jane = { name: "Jane Doe", matchText: null };
+
+  it("keeps a comma'd pattern as one term, so no bare first name is left to match other Janes", () => {
+    const matchText = addStylistTerm(jane, "ZELLE PAYMENT FROM DOE, JANE");
+    expect(matchText).toBe("Jane Doe, ZELLE PAYMENT FROM DOE JANE");
+    const s: MatchableStylist = { id: "jd", ...jane, matchText, startDate: "2026-01-01", endDate: null };
+    expect(stylistTerms(s)).toEqual(["JANE DOE", "ZELLE PAYMENT FROM DOE JANE"]);
+    expect(matchStylist(tx("ZELLE PAYMENT FROM DOE, JANE"), [s])?.id).toBe("jd");
+    expect(matchStylist(tx("ZELLE PAYMENT FROM SMITH, JANE"), [s])).toBeNull();
+  });
+
+  it("treats ; and newlines the same way", () => {
+    expect(addStylistTerm(jane, "ZELLE FROM DOE;JANE\nX")).toBe("Jane Doe, ZELLE FROM DOE JANE X");
+  });
+
+  it("appends to existing match text and skips a term that's already there", () => {
+    expect(addStylistTerm({ name: "Sam", matchText: "S RIVERA" }, "ZELLE FROM SAM R")).toBe("S RIVERA, ZELLE FROM SAM R");
+    expect(addStylistTerm({ name: "Sam", matchText: "S RIVERA, zelle from sam r" }, "ZELLE FROM SAM R")).toBeNull();
+    expect(addStylistTerm(jane, " , ")).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import "server-only";
 import { and, count, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
-import { matchRule, norm } from "./categorize";
+import { addStylistTerm, matchRule, norm } from "./categorize";
 import { getBoothRentCategoryId, getCategorizer } from "./data";
 import { chunk } from "./inbox";
 
@@ -76,22 +76,8 @@ export async function rememberPattern(input: {
   if (stylistId && boothRentId && categoryId === boothRentId) {
     // Booth rent: teach the stylist's match text instead of creating a rule.
     const [st] = await db.select().from(stylists).where(eq(stylists.id, stylistId));
-    if (st) {
-      const split = (t: string | null) =>
-        (t ?? "")
-          .split(/[,;\n]/)
-          .map((x) => x.trim())
-          .filter(Boolean);
-      // No explicit match text means the full name was the implicit term; keep it.
-      const existing = split(st.matchText);
-      const base = existing.length ? existing : split(st.name);
-      if (!base.some((t) => norm(t) === norm(pattern))) {
-        await db
-          .update(stylists)
-          .set({ matchText: [...base, pattern].join(", ") })
-          .where(eq(stylists.id, stylistId));
-      }
-    }
+    const matchText = st ? addStylistTerm(st, pattern) : null;
+    if (matchText) await db.update(stylists).set({ matchText }).where(eq(stylists.id, stylistId));
   } else {
     await db.insert(rules).values({ pattern, categoryId, direction });
   }

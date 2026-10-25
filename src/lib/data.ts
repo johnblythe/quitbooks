@@ -7,6 +7,7 @@ import type { CsvMapping } from "./csv";
 import { makeCategorizer } from "./categorizer";
 import { defaultCutover } from "./bank-status";
 import { monthEnd, monthStart, todayIso, type IsoDate, type MonthKey } from "./dates";
+import { INBOX_LIMIT } from "./inbox";
 import type { MetricTx } from "./metrics";
 import { bankAttention } from "./bank-status";
 import { verifySession } from "./auth";
@@ -127,8 +128,8 @@ export async function getUncategorized(limit = 100) {
     .limit(limit);
 }
 
-/** Max rows the grouped Inbox loads at once. */
-export const INBOX_LIMIT = 2000;
+/** Max rows the grouped Inbox loads at once (defined in inbox.ts so the suggest route can share it). */
+export { INBOX_LIMIT };
 
 /** Every uncategorized row for the grouped Inbox (capped), plus the true total. */
 export async function getInboxRows(limit = INBOX_LIMIT) {
