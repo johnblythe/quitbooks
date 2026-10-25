@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -51,3 +52,11 @@ export async function requireUser(): Promise<SessionPayload> {
   if (!session) redirect("/login");
   return session;
 }
+
+/**
+ * The page-side check (Data Access Layer): every read in src/lib/data.ts runs it, so a revoked or
+ * deleted user's still-signed cookie renders nothing and is sent to /login. Memoized per render
+ * pass, so a page with several reads looks the user up once. Request-time (reads cookies): call it
+ * only inside a <Suspense> boundary, like the reads themselves.
+ */
+export const verifySession = cache(requireUser);

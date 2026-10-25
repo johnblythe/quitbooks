@@ -1,7 +1,7 @@
 import "server-only";
 import { connection } from "next/server";
 import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
-import { getDb, schema } from "@/db";
+import { getDb as openDb, schema } from "@/db";
 import { BOOTH_RENT_KEY, SETTING_KEYS, type OpeningBalance } from "@/db/defaults";
 import type { CsvMapping } from "./csv";
 import { makeCategorizer } from "./categorizer";
@@ -9,11 +9,22 @@ import { defaultCutover } from "./bank-status";
 import { monthEnd, monthStart, todayIso, type IsoDate, type MonthKey } from "./dates";
 import type { MetricTx } from "./metrics";
 import { bankAttention } from "./bank-status";
+import { verifySession } from "./auth";
 
 /**
  * Data access layer. Every read awaits connection() so it runs at request time
  * (Cache Components would otherwise try to prerender it at build).
  */
+
+/**
+ * Every read below gets the database through this, so every page re-checks the session (the user
+ * exists and session_version still matches) and redirects to /login if it doesn't. The proxy only
+ * checks the cookie signature.
+ */
+async function getDb() {
+  await verifySession();
+  return openDb();
+}
 
 const { categories, stylists, transactions, rules, settings, csvMappings, importBatches, bankConnections, bankAccounts } = schema;
 
@@ -194,9 +205,10 @@ export async function getCategorizer() {
   return makeCategorizer(await getDb());
 }
 
-/** Today's date, computed per request (never baked in at build time). */
+/** Today's date, computed per request (never baked in at build time). Session-checked like the reads. */
 export async function requestToday() {
   await connection();
+  await verifySession();
   return todayIso();
 }
 

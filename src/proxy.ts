@@ -3,7 +3,8 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/session-token";
 
 /**
  * Sends anyone without a validly signed session to /login. Stateless on purpose: it does not
- * touch the DB. Actions and handlers re-check (including session revocation) via requireUser().
+ * touch the DB. The full check (user exists, session not revoked) runs in every page data read
+ * (verifySession in src/lib/data.ts) and in every action and handler via requireUser()/getSession().
  */
 export async function proxy(request: NextRequest) {
   const session = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
