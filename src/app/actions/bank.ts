@@ -6,7 +6,14 @@ import { z } from "zod";
 import { getDb, schema } from "@/db";
 import { suggestCategories } from "@/lib/ai-suggest-server";
 import { requireUser } from "@/lib/auth";
-import { connectBank, disconnectBank, refreshBankAccounts, saveBankSelection, syncConnectionThrottled } from "@/lib/bank-sync-server";
+import {
+  BUDGET_USED_NOTE,
+  connectBank,
+  disconnectBank,
+  refreshBankAccounts,
+  saveBankSelection,
+  syncConnectionThrottled,
+} from "@/lib/bank-sync-server";
 import { redactSecrets } from "@/lib/simplefin";
 
 export type BankState = { error?: string; ok?: string } | undefined;
@@ -21,7 +28,8 @@ function syncMessage(r: Awaited<ReturnType<typeof syncConnectionThrottled>>): Ba
     return { ok: `Synced a moment ago. Try again in about ${r.retryInMinutes} minute${r.retryInMinutes === 1 ? "" : "s"}.` };
   }
   if (r.errors.length) return { error: redactSecrets(r.errors.join("; ")) };
-  const note = r.warnings.length ? ` SimpleFIN also reported: ${redactSecrets(r.warnings.join("; "))}` : "";
+  if (r.warnings.includes(BUDGET_USED_NOTE)) return { ok: BUDGET_USED_NOTE };
+  const note = r.warnings.length ? ` Note: ${redactSecrets(r.warnings.join("; "))}` : "";
   return { ok: `Synced: ${r.inserted} new, ${r.linked} matched to entries you typed in.${note}` };
 }
 
@@ -106,7 +114,7 @@ export async function syncBankNowAction(_prev: BankState, formData: FormData): P
   }
 }
 
-/** Deletes the connection, accounts and encrypted URL. Imported transactions stay. */
+/** Deletes the connection and encrypted URL; its accounts are kept, detached (see disconnectBank). Imported transactions stay. */
 export async function disconnectBankAction(formData: FormData) {
   await requireUser();
   const id = z.uuid().safeParse(formData.get("connectionId"));

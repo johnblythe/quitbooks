@@ -3,7 +3,7 @@
  * Next/auth imports (like import-commit.ts) so it runs against any `Db`, including PGlite in tests;
  * `db`, `fetch`, the clock and the key are all injectable. Never log or return the Access URL.
  */
-import { and, between, desc, eq, inArray, isNull, max, min, sql } from "drizzle-orm";
+import { and, between, desc, eq, gt, inArray, isNull, max, min, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import { defaultCutover } from "./bank-status";
@@ -39,7 +39,7 @@ export type SyncDeps = {
   key?: Buffer;
 };
 
-/** `errors` fail the sync; `warnings` (SimpleFIN problems with other connections) don't. */
+/** `errors` fail the sync (red); `warnings` are shown in amber (see syncConnection). */
 export type SyncResult = { inserted: number; linked: number; skipped: number; errors: string[]; warnings: string[] };
 
 /** Re-fetch this many days before the last good sync to catch late-posting items. */
@@ -51,7 +51,16 @@ export const OVERLAP_DAYS = 7;
 export const MAX_BACKFILL_DAYS = 365;
 /** "Sync now" is ignored if the last attempt was more recent than this (SimpleFIN allows 24 requests/day). */
 export const MIN_SYNC_INTERVAL_MS = 15 * 60_000;
+/**
+ * SimpleFIN requests allowed per connection in any rolling 24 hours, counted from bank_sync_runs.
+ * SimpleFIN allows 24 a day and can disable a link that goes over, so this leaves room to spare.
+ */
+export const DAILY_REQUEST_BUDGET = 20;
+export const CATCH_UP_NOTE = "Catching up older history tomorrow: SimpleFIN allows only a few downloads a day.";
+export const BUDGET_USED_NOTE = "Skipped this sync: SimpleFIN's daily download limit is used up. It catches up tomorrow.";
+export const ACCOUNTS_NOT_READY = "SimpleFIN hasn't finished loading your bank yet. Try again in a few minutes.";
 const MAX_ERROR_CHARS = 500;
+const DAY_MS = 86_400_000;
 
 type Executor = Pick<Db, "select" | "insert" | "update">;
 
@@ -70,14 +79,85 @@ export function fetchStartDate(cutover: IsoDate, lastSyncedAt: Date | null): Iso
   return overlap > cutover ? overlap : cutover;
 }
 
+export type SyncPlan = { requests: FetchOptions[]; catchUpLater: boolean };
+
+/**
+ * The SimpleFIN requests one sync makes, given how many the daily budget has left. Normally one
+ * request per 45 days from fetchStartDate (or from the start date when a full fetch is pending).
+ * When that doesn't fit, it fetches only the recent days (from the last sync, else the newest
+ * windows that fit) and sets `catchUpLater`, so a full fetch stays pending for a later sync.
+ */
+export function planSync(
+  c: Pick<schema.BankConnection, "cutoverDate" | "lastSyncedAt" | "fullSyncPending">,
+  now: Date,
+  remaining: number,
+): SyncPlan {
+  if (remaining <= 0) return { requests: [], catchUpLater: true };
+  const end = Math.floor(now.getTime() / 1000);
+  const windowsFrom = (d: IsoDate) => splitWindows(dateToFetchStartUnix(d), end);
+  const asRequests = (w: [number, number][]) => w.map(([startUnix, endUnix]) => ({ startUnix, endUnix }));
+  const wanted = windowsFrom(c.fullSyncPending ? c.cutoverDate : fetchStartDate(c.cutoverDate, c.lastSyncedAt));
+  // A start date in the future has no window yet: still fetch balances, so the accounts are seen.
+  if (!wanted.length) return { requests: [{ balancesOnly: true }], catchUpLater: false };
+  if (wanted.length <= remaining) return { requests: asRequests(wanted), catchUpLater: false };
+  const recent = c.lastSyncedAt ? windowsFrom(fetchStartDate(c.cutoverDate, c.lastSyncedAt)) : wanted;
+  return { requests: asRequests(recent.slice(-remaining)), catchUpLater: true };
+}
+
+/** SimpleFIN requests this connection made (or reserved) in the 24 hours before `now`. */
+export async function requestsInLastDay(db: Pick<Db, "select">, connectionId: string, now: Date): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`coalesce(sum(${bankSyncRuns.requests}), 0)::int` })
+    .from(bankSyncRuns)
+    .where(and(eq(bankSyncRuns.connectionId, connectionId), gt(bankSyncRuns.startedAt, new Date(now.getTime() - DAY_MS))));
+  return row?.n ?? 0;
+}
+
+/**
+ * Records a run that reserves up to `plan(remaining).requests.length` requests, then re-counts, so
+ * two runs starting together can't both spend the last of the budget; the later one shrinks.
+ */
+async function reserveRequests(
+  db: Db,
+  connectionId: string,
+  now: Date,
+  plan: (remaining: number) => SyncPlan,
+): Promise<{ runId: string; plan: SyncPlan }> {
+  const remaining = DAILY_REQUEST_BUDGET - (await requestsInLastDay(db, connectionId, now));
+  let chosen = plan(remaining);
+  const [run] = await db
+    .insert(bankSyncRuns)
+    .values({ connectionId, startedAt: now, requests: chosen.requests.length })
+    .returning({ id: bankSyncRuns.id });
+  const over = (await requestsInLastDay(db, connectionId, now)) - DAILY_REQUEST_BUDGET;
+  if (over > 0) {
+    chosen = plan(chosen.requests.length - over);
+    await db.update(bankSyncRuns).set({ requests: chosen.requests.length }).where(eq(bankSyncRuns.id, run.id));
+  }
+  return { runId: run.id, plan: chosen };
+}
+
+/** Up to 3 attempts with a short backoff, for a write that must not be lost to a brief DB blip. */
+async function withRetry<T>(fn: () => Promise<T>, delaysMs = [100, 400]): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (attempt >= delaysMs.length) throw e;
+      await new Promise((r) => setTimeout(r, delaysMs[attempt]));
+    }
+  }
+}
+
 // ---------- connect / configure ----------
 
 /**
  * Claims a setup token (one-time), stores the encrypted Access URL right away, then fetches and
  * stores the accounts it reports (none included yet). The caller then picks accounts and the start
- * date. Everything that can fail without spending the token (the key, the database) runs before the
- * claim. If the account fetch fails afterwards, the connection is kept with `accountsError` (also in
- * its last_error) and refreshBankAccounts can retry without a new token.
+ * date. The key is loaded and the database read once before the claim, so a missing key or a down
+ * database fails without spending the token; the one write after the claim is retried (3 attempts).
+ * If the account fetch fails afterwards, the connection is kept with `accountsError` (also in its
+ * last_error) and refreshBankAccounts can retry without a new token.
  */
 export async function connectBank(
   deps: SyncDeps,
@@ -90,14 +170,17 @@ export async function connectBank(
   const cutover = defaultCutover(latest?.d ?? null, todayIso());
 
   const accessUrl = await claimSetupToken(token, fetchFn);
-  const [conn] = await db
-    .insert(bankConnections)
-    .values({
-      accessUrlEnc: encryptSecret(accessUrl, key),
-      label: (opts.label ?? "").trim().slice(0, 60) || "BMO",
-      cutoverDate: cutover,
-    })
-    .returning({ id: bankConnections.id });
+  const values = {
+    accessUrlEnc: encryptSecret(accessUrl, key),
+    label: (opts.label ?? "").trim().slice(0, 60) || "BMO",
+    cutoverDate: cutover,
+  };
+  let conn: { id: string };
+  try {
+    [conn] = await withRetry(() => db.insert(bankConnections).values(values).returning({ id: bankConnections.id }));
+  } catch {
+    throw new SimplefinError("Couldn't save the bank link, and the setup token is now used up. Make a new token at SimpleFIN Bridge and try again.");
+  }
   try {
     await refreshBankAccounts({ ...deps, key }, conn.id);
   } catch (e) {
@@ -107,25 +190,40 @@ export async function connectBank(
 }
 
 /**
- * Fetches the account list (one balances-only request) and stores it under this connection. An
- * account seen before, under a connection since disconnected, is re-attached rather than added
- * again, so its feed rows still dedupe. Re-attached accounts start out not included. On failure the
- * reason is saved in last_error and rethrown.
+ * Fetches the account list (one balances-only request, counted in the daily budget) and stores it
+ * under this connection. An account seen before, under a connection since disconnected, is
+ * re-attached rather than added again, so its feed rows still dedupe. Re-attached accounts start out
+ * not included. No accounts yet (the bank is still loading at SimpleFIN) is a failure, with
+ * SimpleFIN's own messages when it sent any. On failure the reason is saved in last_error and rethrown.
  */
 export async function refreshBankAccounts(deps: SyncDeps, connectionId: string): Promise<void> {
   const { db, fetchFn } = deps;
+  const now = deps.now ?? new Date();
   const [conn] = await db
     .select({ enc: bankConnections.accessUrlEnc })
     .from(bankConnections)
     .where(eq(bankConnections.id, connectionId));
   if (!conn) throw new SimplefinError("Bank connection not found.");
+  let runId: string | undefined;
   try {
+    const reserved = await reserveRequests(db, connectionId, now, (remaining) => ({
+      requests: remaining > 0 ? [{ balancesOnly: true }] : [],
+      catchUpLater: false,
+    }));
+    runId = reserved.runId;
+    if (!reserved.plan.requests.length) throw new SimplefinError("SimpleFIN's daily download limit is used up. Try again tomorrow.");
     const set = await fetchAccountSet(decryptSecret(conn.enc, deps.key), { balancesOnly: true }, fetchFn);
+    if (!set.accounts.length) {
+      const said = classifyErrors(set, { accountIds: new Set() });
+      const messages = [...said.errors, ...said.unattributed, ...said.others];
+      throw new SimplefinError(messages.length ? joinErrors(messages) : ACCOUNTS_NOT_READY);
+    }
     await db.transaction(async (tx) => {
       for (const a of set.accounts) {
         const m = mapAccount(a, set);
         const values = {
           connectionId,
+          connId: m.connId,
           name: m.name,
           orgName: m.orgName,
           currency: m.currency,
@@ -146,11 +244,13 @@ export async function refreshBankAccounts(deps: SyncDeps, connectionId: string):
       }
       await tx.update(bankConnections).set({ lastError: null, lastErrorAt: null }).where(eq(bankConnections.id, connectionId));
     });
+    await db.update(bankSyncRuns).set({ finishedAt: new Date() }).where(eq(bankSyncRuns.id, runId));
   } catch (e) {
     const message = messageOf(e);
+    if (runId) await db.update(bankSyncRuns).set({ finishedAt: new Date(), error: message }).where(eq(bankSyncRuns.id, runId));
     await db
       .update(bankConnections)
-      .set({ lastError: message, lastErrorAt: deps.now ?? new Date() })
+      .set({ lastError: message, lastErrorAt: now })
       .where(eq(bankConnections.id, connectionId));
     throw new SimplefinError(message);
   }
@@ -229,12 +329,11 @@ export async function activeCutoverDate(db: Pick<Db, "select">): Promise<IsoDate
 }
 
 /**
- * First date the CSV import skips while a feed is live: the start date, or the earliest feed row if
- * that is earlier (the start date moved later after a sync). Null when there is no live feed.
+ * First date the CSV import skips: the earlier of a live feed's start date and the earliest feed row
+ * in the books. Feed rows stay after a disconnect, so the guard does too. Null with neither.
  */
 export async function csvCutoverDate(db: Pick<Db, "select">): Promise<IsoDate | null> {
   const cutover = await activeCutoverDate(db);
-  if (!cutover) return null;
   const [row] = await db.select({ d: min(transactions.date) }).from(transactions).where(eq(transactions.source, "bank_sync"));
   return feedCoverageStart(cutover, row?.d ?? null);
 }
@@ -371,6 +470,7 @@ async function applyAccount(
           availableCents: balance.availableCents,
           balanceDate: balance.balanceDate,
           name: balance.name,
+          ...(balance.connId ? { connId: balance.connId } : {}),
         })
         .where(eq(bankAccounts.id, acct.id));
     }
@@ -384,11 +484,15 @@ function joinErrors(errors: string[]): string {
 }
 
 /**
- * Syncs one connection. Never throws for provider/HTTP problems: they land in `errors` and
- * `last_error`, and last_synced_at stays put so the next sync fetches the same days again. Only
- * problems with our accounts count: an included account missing from the response, or a SimpleFIN
- * error naming one of them or its connection. Errors about other connections on the same Bridge are
- * `warnings` (saved in last_warning) and the sync still counts.
+ * Syncs one connection. Never throws for provider/HTTP problems. What SimpleFIN reports decides the
+ * outcome:
+ * - a problem with our accounts (an included account missing from the response, or an error naming
+ *   one of them or its bank login): `errors`, saved in last_error (red), and last_synced_at holds so
+ *   the next sync fetches the same days again. A missing account's error also carries every message
+ *   SimpleFIN sent, since the real reason ("Please re-authenticate") may not name the account;
+ * - an error that names nothing: a warning (amber), and last_synced_at still holds;
+ * - an error about other accounts or logins on the same Bridge: a warning, and the sync counts.
+ * Requests stay within DAILY_REQUEST_BUDGET: a full fetch that doesn't fit is done on a later sync.
  */
 export async function syncConnection(deps: SyncDeps, connectionId: string): Promise<SyncResult> {
   const { db, fetchFn } = deps;
@@ -406,15 +510,23 @@ export async function syncConnection(deps: SyncDeps, connectionId: string): Prom
     .where(and(eq(bankAccounts.connectionId, connectionId), eq(bankAccounts.include, true)));
   if (!accounts.length) return result;
 
-  const [run] = await db.insert(bankSyncRuns).values({ connectionId, startedAt: now }).returning({ id: bankSyncRuns.id });
+  const { runId, plan } = await reserveRequests(db, connectionId, now, (remaining) => planSync(conn, now, remaining));
+  if (!plan.requests.length) {
+    result.warnings.push(BUDGET_USED_NOTE);
+    await db.update(bankConnections).set({ lastWarning: BUDGET_USED_NOTE }).where(eq(bankConnections.id, connectionId));
+    await db.update(bankSyncRuns).set({ finishedAt: new Date(), error: BUDGET_USED_NOTE }).where(eq(bankSyncRuns.id, runId));
+    return result;
+  }
 
+  let made = 0;
+  let unattributed = 0;
   try {
     const accessUrl = decryptSecret(conn.accessUrlEnc, deps.key);
-    const startDate = conn.fullSyncPending ? conn.cutoverDate : fetchStartDate(conn.cutoverDate, conn.lastSyncedAt);
-    const windows = splitWindows(dateToFetchStartUnix(startDate), Math.floor(now.getTime() / 1000));
-    // A start date in the future has no window yet: still fetch balances, so the accounts are seen.
-    const requests: FetchOptions[] = windows.length ? windows.map(([s, e]) => ({ startUnix: s, endUnix: e })) : [{ balancesOnly: true }];
-    const ours = new Set(accounts.map((a) => a.externalId));
+    const ours = {
+      accountIds: new Set(accounts.map((a) => a.externalId)),
+      connIds: new Set(accounts.flatMap((a) => (a.connId ? [a.connId] : []))),
+    };
+    const said = { errors: [] as string[], unattributed: [] as string[], others: [] as string[] };
     const addUnique = (list: string[], msgs: string[]) => {
       for (const m of msgs) if (!list.includes(m)) list.push(m);
     };
@@ -423,12 +535,14 @@ export async function syncConnection(deps: SyncDeps, connectionId: string): Prom
     const txByAccount = new Map<string, Map<string, MappedTx>>();
     const accountInfo = new Map<string, SfAccount>();
     let lastSet: SfAccountSet | undefined;
-    for (const req of requests) {
+    for (const req of plan.requests) {
+      made++;
       const set = await fetchAccountSet(accessUrl, req, fetchFn);
       lastSet = set;
-      const { errors, warnings } = classifyErrors(set, ours);
-      addUnique(result.errors, errors);
-      addUnique(result.warnings, warnings);
+      const c = classifyErrors(set, ours);
+      addUnique(said.errors, c.errors);
+      addUnique(said.unattributed, c.unattributed);
+      addUnique(said.others, c.others);
       for (const a of set.accounts) {
         accountInfo.set(String(a.id), a);
         const bucket = txByAccount.get(String(a.id)) ?? new Map<string, MappedTx>();
@@ -441,13 +555,20 @@ export async function syncConnection(deps: SyncDeps, connectionId: string): Prom
       }
     }
 
+    const missing = accounts.filter((a) => !accountInfo.has(a.externalId));
+    if (missing.length) {
+      result.errors.push(...said.errors, ...said.unattributed, ...said.others);
+      for (const a of missing) result.errors.push(`Account "${a.name}" wasn't returned by SimpleFIN.`);
+    } else {
+      result.errors.push(...said.errors);
+      result.warnings.push(...said.unattributed, ...said.others);
+      unattributed = said.unattributed.length;
+    }
+
     const categorize = await makeCategorizer(db);
     for (const acct of accounts) {
       const info = accountInfo.get(acct.externalId);
-      if (!info) {
-        result.errors.push(`Account "${acct.name}" wasn't returned by SimpleFIN.`);
-        continue;
-      }
+      if (!info) continue;
       const r = await applyAccount(
         db,
         acct,
@@ -463,22 +584,26 @@ export async function syncConnection(deps: SyncDeps, connectionId: string): Prom
   } catch (e) {
     result.errors.push(messageOf(e));
   }
+  if (plan.catchUpLater) result.warnings.push(CATCH_UP_NOTE);
 
   const failed = result.errors.length > 0;
+  const hold = failed || unattributed > 0;
   const error = failed ? joinErrors(result.errors) : null;
   const lastWarning = result.warnings.length ? joinErrors(result.warnings) : null;
+  // A full fetch stays pending until one completes cleanly; a budget-trimmed sync makes one pending.
+  const pending = plan.catchUpLater ? { fullSyncPending: true } : !hold && conn.fullSyncPending ? { fullSyncPending: false } : {};
   await db
     .update(bankConnections)
     .set(
       failed
-        ? { lastError: error, lastErrorAt: now, lastWarning }
-        : { lastSyncedAt: now, lastError: null, lastErrorAt: null, lastWarning, ...(conn.fullSyncPending ? { fullSyncPending: false } : {}) },
+        ? { lastError: error, lastErrorAt: now, lastWarning, ...pending }
+        : { ...(hold ? {} : { lastSyncedAt: now }), lastError: null, lastErrorAt: null, lastWarning, ...pending },
     )
     .where(eq(bankConnections.id, connectionId));
   await db
     .update(bankSyncRuns)
-    .set({ finishedAt: new Date(), inserted: result.inserted, linked: result.linked, skipped: result.skipped, error })
-    .where(eq(bankSyncRuns.id, run.id));
+    .set({ finishedAt: new Date(), inserted: result.inserted, linked: result.linked, skipped: result.skipped, error, requests: made })
+    .where(eq(bankSyncRuns.id, runId));
   return result;
 }
 

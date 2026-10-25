@@ -36,6 +36,13 @@
       "when": 1792893139908,
       "tag": "0004_polite_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792894776545,
+      "tag": "0005_volatile_kitty_pryde",
+      "breakpoints": true
     }
   ]
 }

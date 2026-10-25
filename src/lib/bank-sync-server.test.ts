@@ -11,12 +11,18 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import {
+  ACCOUNTS_NOT_READY,
+  BUDGET_USED_NOTE,
+  CATCH_UP_NOTE,
+  DAILY_REQUEST_BUDGET,
   activeCutoverDate,
   connectBank,
   csvCutoverDate,
   disconnectBank,
   fetchStartDate,
+  planSync,
   refreshBankAccounts,
+  requestsInLastDay,
   saveBankSelection,
   syncAllConnections,
   syncConnection,
@@ -502,5 +508,179 @@ describe("a start date in the future (F13)", () => {
     expect(conn.lastSyncedAt?.toISOString()).toBe(NOW.toISOString());
     const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.externalId, "Demo Checking"));
     expect(acct.balanceCents).toBe(2448555);
+  });
+});
+
+describe("round 2: SimpleFIN errors (R2, R3)", () => {
+  const reauth = { code: "con.auth", msg: "Please re-authenticate with your bank.", conn_id: "CON-SIMPLEFIN-DEMO" };
+
+  it("stores SimpleFIN's conn_id and shows its error when our account is left out", async () => {
+    const f = fakeBank();
+    const id = await setup(f);
+    const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.externalId, "Demo Checking"));
+    expect(acct.connId).toBe("CON-SIMPLEFIN-DEMO");
+    // BMO's login is broken: its accounts are left out, and the error names only the login.
+    f.mode.set = { ...fixture, accounts: [], errlist: [reauth] };
+    const r = await syncConnection(deps(f), id);
+    expect(r.errors).toEqual(["con.auth: Please re-authenticate with your bank.", 'Account "SimpleFIN Checking" wasn\'t returned by SimpleFIN.']);
+    expect(r.warnings).toEqual([]);
+    const [conn] = await db.select().from(bankConnections);
+    expect(conn.lastError).toContain("Please re-authenticate");
+    expect(conn.lastSyncedAt).toBeNull();
+  });
+
+  it("puts every SimpleFIN message into last_error when an account is missing, even an unattributed one", async () => {
+    const f = fakeBank();
+    const id = await setup(f);
+    await db.update(bankAccounts).set({ connId: null }); // e.g. loaded before conn_id was stored
+    f.mode.set = { ...fixture, accounts: [], errlist: [{ code: "gen.x", msg: "Something is wrong" }] };
+    await syncConnection(deps(f), id);
+    expect((await db.select().from(bankConnections))[0].lastError).toMatch(/^gen.x: Something is wrong; Account "SimpleFIN Checking"/);
+  });
+
+  it("an error that names nothing is amber and holds last_synced_at", async () => {
+    const f = fakeBank();
+    const id = await setup(f);
+    await syncConnection(deps(f), id);
+    const [good] = await db.select().from(bankConnections);
+    f.mode.set = { ...fixture, errlist: [{ code: "gen.slow", msg: "Some banks are slow today" }] };
+    const r = await syncConnection(deps(f, new Date(NOW.getTime() + 3600_000)), id);
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toEqual(["gen.slow: Some banks are slow today"]);
+    const [conn] = await db.select().from(bankConnections);
+    expect(conn.lastError).toBeNull();
+    expect(conn.lastWarning).toBe("gen.slow: Some banks are slow today");
+    expect(conn.lastSyncedAt?.toISOString()).toBe(good.lastSyncedAt?.toISOString());
+    // A legacy errors[] string counts as naming nothing too.
+    f.mode.set = { ...fixture, errors: ["Connection may need attention"] };
+    await syncConnection(deps(f, new Date(NOW.getTime() + 2 * 3600_000)), id);
+    expect((await db.select().from(bankConnections))[0].lastSyncedAt?.toISOString()).toBe(good.lastSyncedAt?.toISOString());
+  });
+});
+
+describe("round 2: CSV guard after a disconnect (R5)", () => {
+  it("keeps covering the feed rows that stay in the books", async () => {
+    const f = fakeBank();
+    const id = await setup(f, "2026-09-01");
+    await syncConnection(deps(f), id);
+    const [earliest] = (await db.select({ d: transactions.date }).from(transactions)).map((r) => r.d).sort();
+    await disconnectBank(db, id);
+    expect(await activeCutoverDate(db)).toBeNull();
+    expect(await csvCutoverDate(db)).toBe(earliest);
+  });
+});
+
+describe("round 2: SimpleFIN request budget (R6)", () => {
+  const usedEarlier = async (connectionId: string, requests: number, hoursAgo = 1) =>
+    db.insert(bankSyncRuns).values({ connectionId, startedAt: new Date(NOW.getTime() - hoursAgo * 3600_000), requests });
+
+  it("plans the full fetch when it fits, else the recent days, else nothing", () => {
+    const c = { cutoverDate: "2025-10-26", lastSyncedAt: new Date(NOW.getTime() - 86_400_000), fullSyncPending: true };
+    expect(planSync(c, NOW, 20)).toMatchObject({ catchUpLater: false });
+    expect(planSync(c, NOW, 20).requests).toHaveLength(9);
+    const trimmed = planSync(c, NOW, 3);
+    expect(trimmed.catchUpLater).toBe(true);
+    expect(trimmed.requests).toHaveLength(1); // from the last sync minus a week
+    expect(planSync({ ...c, lastSyncedAt: null }, NOW, 3).requests).toHaveLength(3); // the newest 3 windows
+    expect(planSync(c, NOW, 0)).toEqual({ requests: [], catchUpLater: true });
+    expect(planSync({ ...c, cutoverDate: "2026-12-01", fullSyncPending: false }, NOW, 1)).toEqual({
+      requests: [{ balancesOnly: true }],
+      catchUpLater: false,
+    });
+  });
+
+  it("a backfill that doesn't fit fetches what it can, stays pending, and says so", async () => {
+    const f = fakeBank();
+    const id = await setup(f, "2026-06-01"); // a full fetch needs 4 requests
+    await usedEarlier(id, DAILY_REQUEST_BUDGET - 2 - 1); // the connect fetch used 1 more
+    f.gets.length = 0;
+    const r = await syncConnection(deps(f), id);
+    expect(f.gets).toHaveLength(2);
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toEqual([CATCH_UP_NOTE]);
+    const [conn] = await db.select().from(bankConnections);
+    expect(conn.fullSyncPending).toBe(true);
+    expect(conn.lastWarning).toBe(CATCH_UP_NOTE);
+    expect(await requestsInLastDay(db, id, NOW)).toBe(DAILY_REQUEST_BUDGET);
+
+    // Budget used up: no request at all, and the watermark holds.
+    f.gets.length = 0;
+    const r2 = await syncConnection(deps(f, new Date(NOW.getTime() + 60_000)), id);
+    expect(f.gets).toHaveLength(0);
+    expect(r2.warnings).toEqual([BUDGET_USED_NOTE]);
+    expect((await db.select().from(bankConnections))[0].lastSyncedAt?.toISOString()).toBe(NOW.toISOString());
+
+    // A day later the budget is back and the catch-up runs from the start date.
+    f.gets.length = 0;
+    await syncConnection(deps(f, new Date(NOW.getTime() + 86_400_000 + 60_000)), id);
+    expect(startDay(f.gets[0])).toBe("2026-05-31");
+    expect((await db.select().from(bankConnections))[0].fullSyncPending).toBe(false);
+    expect(await txCount()).toBe(checkingTxs.length);
+  });
+
+  it("never goes over the budget while an account keeps failing", async () => {
+    const f = fakeBank();
+    const id = await setup(f, "2025-10-26"); // a full fetch needs 9 requests
+    f.mode.set = { ...fixture, accounts: fixture.accounts.filter((a) => a.id !== "Demo Checking") };
+    for (let i = 0; i < 6; i++) await syncConnection(deps(f, new Date(NOW.getTime() + i * 60_000)), id);
+    expect(await requestsInLastDay(db, id, new Date(NOW.getTime() + 6 * 60_000))).toBe(DAILY_REQUEST_BUDGET);
+    expect(f.gets.length).toBe(DAILY_REQUEST_BUDGET); // the connect fetch was one of them
+    // Runs older than a day stop counting.
+    expect(await requestsInLastDay(db, id, new Date(NOW.getTime() + 2 * 86_400_000))).toBe(0);
+  });
+
+  it("the account-list fetch counts too, and is refused when the budget is used up", async () => {
+    const f = fakeBank();
+    const { connectionId } = await connectBank(deps(f), TOKEN);
+    expect(await requestsInLastDay(db, connectionId, NOW)).toBe(1);
+    await usedEarlier(connectionId, DAILY_REQUEST_BUDGET - 1);
+    f.gets.length = 0;
+    await expect(refreshBankAccounts(deps(f), connectionId)).rejects.toThrow(/daily download limit/);
+    expect(f.gets).toHaveLength(0);
+  });
+});
+
+describe("round 2: empty account list right after linking (R7)", () => {
+  it("is a failure with a plain reason, and a retry that finds accounts clears it", async () => {
+    const f = fakeBank({ ...fixture, accounts: [] });
+    const out = await connectBank(deps(f), TOKEN);
+    expect(out.accountsError).toBe(ACCOUNTS_NOT_READY);
+    expect((await db.select().from(bankConnections))[0].lastError).toBe(ACCOUNTS_NOT_READY);
+    f.mode.set = { ...fixture, accounts: [], errlist: [{ code: "con.loading", msg: "Still syncing with your bank" }] };
+    await expect(refreshBankAccounts(deps(f), out.connectionId)).rejects.toThrow("con.loading: Still syncing with your bank");
+    f.mode.set = fixture;
+    await refreshBankAccounts(deps(f), out.connectionId);
+    expect((await db.select().from(bankConnections))[0].lastError).toBeNull();
+  });
+});
+
+describe("round 2: the write after the claim is retried (R10)", () => {
+  const flakyInserts = (fails: number): Db =>
+    new Proxy(db, {
+      get(target, prop) {
+        if (prop === "insert" && fails > 0) {
+          fails--;
+          return () => {
+            throw new Error("Connection terminated unexpectedly");
+          };
+        }
+        const v = Reflect.get(target, prop);
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    });
+
+  it("survives two failed attempts", async () => {
+    const f = fakeBank();
+    const out = await connectBank({ db: flakyInserts(2), fetchFn: f.fetchFn, now: NOW, key }, TOKEN);
+    expect(out.accountsError).toBeUndefined();
+    expect(f.posts).toHaveLength(1);
+    expect((await db.select({ n: count() }).from(bankConnections))[0].n).toBe(1);
+  });
+
+  it("says the token is spent after three", async () => {
+    const f = fakeBank();
+    await expect(connectBank({ db: flakyInserts(3), fetchFn: f.fetchFn, now: NOW, key }, TOKEN)).rejects.toThrow(
+      /setup token is now used up/,
+    );
   });
 });

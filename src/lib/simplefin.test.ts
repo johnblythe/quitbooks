@@ -97,7 +97,7 @@ describe("redactSecrets / classifyErrors", () => {
     { id: "ACT-1", name: "Checking", balance: "1", "balance-date": 1, conn_id: "CON-BMO" },
     { id: "ACT-9", name: "Other bank", balance: "1", "balance-date": 1, conn_id: "CON-CHASE" },
   ];
-  const ours = new Set(["ACT-1"]);
+  const ours = { accountIds: new Set(["ACT-1"]) };
   it("fails on errors about our account or its connection", () => {
     expect(
       classifyErrors(
@@ -110,9 +110,9 @@ describe("redactSecrets / classifyErrors", () => {
         },
         ours,
       ),
-    ).toEqual({ errors: ["con.auth: Re-auth needed", "act.stale: Stale"], warnings: [] });
+    ).toEqual({ errors: ["con.auth: Re-auth needed", "act.stale: Stale"], unattributed: [], others: [] });
   });
-  it("warns on other connections, unattributed and legacy errors, redacted and not repeated", () => {
+  it("separates other connections from errors that name nothing, redacted and not repeated", () => {
     expect(
       classifyErrors(
         {
@@ -128,13 +128,17 @@ describe("redactSecrets / classifyErrors", () => {
       ),
     ).toEqual({
       errors: [],
-      warnings: ["con.auth: Chase needs you", "act.x: Other", "gen.note: Heads up", "old https://[redacted]@x.simplefin.org"],
+      unattributed: ["gen.note: Heads up", "old https://[redacted]@x.simplefin.org"],
+      others: ["con.auth: Chase needs you", "act.x: Other"],
     });
   });
-  it("can't tie a connection error to an account SimpleFIN didn't return", () => {
-    expect(classifyErrors({ accounts: [], errlist: [{ code: "con.auth", msg: "x", conn_id: "CON-BMO" }] }, ours)).toEqual({
-      errors: [],
-      warnings: ["con.auth: x"],
+  it("uses the stored conn_id when SimpleFIN leaves our account out", () => {
+    const set = { accounts: [], errlist: [{ code: "con.auth", msg: "Please re-authenticate", conn_id: "CON-BMO" }] };
+    expect(classifyErrors(set, ours).errors).toEqual([]);
+    expect(classifyErrors(set, { ...ours, connIds: new Set(["CON-BMO"]) })).toEqual({
+      errors: ["con.auth: Please re-authenticate"],
+      unattributed: [],
+      others: [],
     });
   });
 });
@@ -203,5 +207,6 @@ describe("demo fixture (real SimpleFIN response)", () => {
     }
     const checking = fixture.accounts.find((a) => a.id === "Demo Checking")!;
     expect(mapAccount(checking, fixture).balanceCents).toBe(2448555);
+    expect(mapAccount(checking, fixture).connId).toBe("CON-SIMPLEFIN-DEMO");
   });
 });

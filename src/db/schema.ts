@@ -109,6 +109,11 @@ export const bankAccounts = pgTable(
     connectionId: uuid("connection_id").references(() => bankConnections.id, { onDelete: "set null" }),
     /** SimpleFIN's account id. One row per SimpleFIN account, whichever connection it's under. */
     externalId: text("external_id").notNull(),
+    /**
+     * SimpleFIN's id for the bank login this account is under (`conn_id`), so an error about that
+     * login is recognized as ours even when SimpleFIN leaves the account out of the response.
+     */
+    connId: text("conn_id"),
     name: text("name").notNull(),
     orgName: text("org_name").notNull().default(""),
     currency: text("currency").notNull().default("USD"),
@@ -122,7 +127,7 @@ export const bankAccounts = pgTable(
   (t) => [uniqueIndex("bank_accounts_ext_idx").on(t.externalId)],
 );
 
-/** One row per sync attempt, for debugging the feed. */
+/** One row per sync attempt (or account-list fetch), for debugging the feed and counting requests. */
 export const bankSyncRuns = pgTable("bank_sync_runs", {
   id: uuid("id").primaryKey().defaultRandom(),
   connectionId: uuid("connection_id").references(() => bankConnections.id, { onDelete: "cascade" }),
@@ -132,6 +137,8 @@ export const bankSyncRuns = pgTable("bank_sync_runs", {
   linked: integer("linked").notNull().default(0),
   skipped: integer("skipped").notNull().default(0),
   error: text("error"),
+  /** SimpleFIN requests this run made (or has reserved, while running). Feeds the daily request budget. */
+  requests: integer("requests").notNull().default(0),
 });
 
 export const transactions = pgTable(

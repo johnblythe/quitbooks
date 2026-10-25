@@ -164,7 +164,7 @@ export function ConnectedView({ conn }: { conn: BankCardConnection }) {
         <ErrorText>{conn.lastError}</ErrorText>
       ) : conn.lastWarning ? (
         <p role="status" className="rounded-xl bg-warn-bg px-3 py-2 text-sm text-warn">
-          Synced. SimpleFIN also reported: {conn.lastWarning}
+          {conn.lastWarning}
         </p>
       ) : null}
       <ul className="divide-y divide-line">

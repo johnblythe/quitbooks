@@ -17,12 +17,13 @@ export function coveredNote(n: number): string {
 }
 
 /**
- * Where the CSV guard starts with a live feed: its start date, or the earliest feed row if that is
- * earlier (the start date was moved later after a sync, and those feed rows are still in the books).
+ * Where the CSV guard starts: the earlier of a live feed's start date and the earliest feed row in
+ * the books (the start date may have moved later after a sync, or the feed been disconnected, and
+ * those rows are still there). Null when there is neither.
  */
 export function feedCoverageStart(cutover: IsoDate | null, earliestFeedRow: IsoDate | null): IsoDate | null {
-  if (!cutover) return null;
-  return earliestFeedRow && earliestFeedRow < cutover ? earliestFeedRow : cutover;
+  if (!cutover || !earliestFeedRow) return cutover ?? earliestFeedRow;
+  return earliestFeedRow < cutover ? earliestFeedRow : cutover;
 }
 
 /** Why a feed start date can't overlap CSV-imported rows (same reason as above), or null when it doesn't. */

@@ -16,7 +16,8 @@ describe("splitByCutover", () => {
 });
 
 describe("feedCoverageStart", () => {
-  it("is off without a live feed", () => expect(feedCoverageStart(null, "2026-09-01")).toBeNull());
+  it("is off with no live feed and no feed rows", () => expect(feedCoverageStart(null, null)).toBeNull());
+  it("still covers feed rows after a disconnect", () => expect(feedCoverageStart(null, "2026-09-01")).toBe("2026-09-01"));
   it("is the start date when feed rows begin there or later", () => {
     expect(feedCoverageStart("2026-10-01", null)).toBe("2026-10-01");
     expect(feedCoverageStart("2026-10-01", "2026-10-03")).toBe("2026-10-01");

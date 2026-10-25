@@ -4,7 +4,8 @@ import { BRIDGE_FIX_URL } from "@/lib/bank-status";
 
 /**
  * Shown on the Dashboard and Inbox when the bank feed errored or hasn't synced in 3+ days (red), or
- * synced but SimpleFIN reported a problem with another connection (amber). Render inside Suspense.
+ * when the last sync left a note: a SimpleFIN message, or the daily request limit (amber). Render
+ * inside Suspense.
  */
 export async function BankBanner() {
   const attention = await getBankAttention();
@@ -12,7 +13,7 @@ export async function BankBanner() {
   if (attention.tone === "warn") {
     return (
       <div role="status" className="rounded-2xl bg-warn-bg px-4 py-3 text-sm text-warn">
-        <p className="font-semibold">BMO synced. SimpleFIN also reported a problem</p>
+        <p className="font-semibold">A note about the BMO feed</p>
         <p className="mt-0.5 break-words">{attention.message}</p>
         <p className="mt-1">
           <a href={BRIDGE_FIX_URL} target="_blank" rel="noreferrer" className="underline">
