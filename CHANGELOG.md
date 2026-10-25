@@ -5,6 +5,14 @@ All notable changes to this project are documented here, in the [Keep a Changelo
 ## [Unreleased] - 2026-10-24
 
 ### Added
+- Split transactions:
+  - split any row (bank feed, CSV or manual) into 2 or more lines, each with a category, a stylist (required for Booth Rent), an amount and an optional memo; lines can mix signs (a Square deposit net of fees);
+  - the lines must add up exactly to the row, checked live in the editor ("Left to assign") and again on the server; the row's amount is locked while split;
+  - the split editor opens from the transaction page and from Inbox one-off cards; "Remove split" turns the row back into one (back to the Inbox unless a category is picked);
+  - the dashboard, P&L, summary CSV and detailed CSV (one row per line) use the lines; the transactions list shows a "Split · N" pill;
+  - split rows never appear in the Inbox, rules, the rule tester's Inbox count or AI suggestions;
+  - migration `0004` adds `transactions.is_split` and the `transaction_splits` table.
+- "Cash basis" labels on the P&L page, its print view, and the first line of both CSV exports.
 - Automatic bank sync through SimpleFIN Bridge:
   - a one-time link in Settings → Bank connection;
   - a daily Vercel Cron (11:00 UTC) and "Sync now";
