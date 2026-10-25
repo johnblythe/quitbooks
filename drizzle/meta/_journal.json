@@ -29,6 +29,13 @@
       "when": 1792876718373,
       "tag": "0003_nebulous_jocasta",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792892548667,
+      "tag": "0004_first_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }
