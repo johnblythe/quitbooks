@@ -5,6 +5,13 @@ All notable changes to this project are documented here, in the [Keep a Changelo
 ## [Unreleased] - 2026-10-24
 
 ### Added
+- CSV import with category mapping, for a QuickBooks Online export or any CSV with a category column:
+  - an optional Category column in the column mapping (QuickBooks' "Split" is detected automatically), plus Name and Memo joined into the description with duplicates dropped;
+  - a preview step listing each distinct category in the file with its row count and net total, to map to an existing category, create as new (editable name and kind), or leave for the Inbox;
+  - sensible defaults: exact name match, QuickBooks placeholders (-Split-, Uncategorized, Ask My Accountant, blank) to the Inbox, new categories typed by row direction and as transfers for owner equity names;
+  - a mapped category beats rules, except Booth Rent, which still needs a stylist from stylist matching and otherwise goes to the Inbox;
+  - new categories are created inside the same atomic commit, and the choices are saved with the column mapping so a re-import pre-fills them;
+  - QuickBooks "Transaction Detail by Account" report lines (section headings, "Total for" rows, the "Cash Basis" footer) are skipped and counted instead of flagged as errors.
 - Automatic bank sync through SimpleFIN Bridge:
   - a one-time link in Settings → Bank connection;
   - a daily Vercel Cron (11:00 UTC) and "Sync now";

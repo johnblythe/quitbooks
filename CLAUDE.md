@@ -42,6 +42,7 @@ Done:
   - grouped by suggested merchant pattern: one pick sorts a group, and "remember" saves a rule;
   - one-offs get per-row cards;
   - Booth Rent + stylist remembers by extending the stylist's match text.
+- Import with category mapping (QuickBooks Transaction Detail CSV): optional Category column, per-value mapping step (existing / create new / Inbox), mapped category beats rules (Booth Rent still needs a stylist), choices saved with the column mapping, report lines skipped. The QuickBooks layout is from memory, not a verified export.
 - Categorization: stylist names match as whole words, only within the stylist's active window (14 days before start through 45 after end).
 - Stylists: roster with weekly/biweekly/monthly rent, start/end dates, bank match text.
 - Settings: chair count, opening balance, categories (add/rename/hide), rules (add/edit/delete with a live "Matches N past · M in Inbox" test).
@@ -73,7 +74,7 @@ Next up, in order:
    - undo an import (by `import_batch_id`);
    - split a transaction;
    - password change screen;
-   - QuickBooks history (CSV export through the importer, for dates before the feed starts);
+   - QuickBooks bank-rules import (not done: the file format is unverified);
    - PWA polish;
    - review P2s and product calls (runway vs owner draws, rent carry-forward, chair count).
 
