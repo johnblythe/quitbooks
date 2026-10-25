@@ -81,6 +81,16 @@ describe("categorize", () => {
 const ann: MatchableStylist = { id: "ann", name: "Ann", matchText: "ANN", startDate: "2026-01-01", endDate: null };
 const tx = (description: string, date = "2026-10-01", amountCents = 25000) => ({ date, amountCents, description });
 
+describe("stylist names with separators", () => {
+  const doe: MatchableStylist = { id: "doe", name: "Doe, Jane", matchText: null, startDate: "2026-01-01", endDate: null };
+  it("uses the whole name as one term", () => expect(stylistTerms(doe)).toEqual(["DOE JANE"]));
+  it("matches the name however the bank punctuates it, and not another Jane", () => {
+    expect(matchStylist(tx("ZELLE FROM DOE, JANE"), [doe])?.id).toBe("doe");
+    expect(matchStylist(tx("ZELLE FROM DOE JANE"), [doe])?.id).toBe("doe");
+    expect(matchStylist(tx("ZELLE FROM SMITH, JANE"), [doe])).toBeNull();
+  });
+});
+
 describe("matchStylist whole words", () => {
   it.each([
     "ANNUAL REWARDS CREDIT",
@@ -158,6 +168,17 @@ describe("suggestPattern", () => {
     expect(suggestPattern("ZELLE FROM JANE DOE 8234 REF")).toBe("ZELLE FROM JANE DOE");
     expect(suggestPattern("ONLINE BANKING TRANSFER TO SAV 8847")).toBe("ONLINE BANKING TRANSFER TO SAV");
   });
+  it.each([
+    ["ZELLE PAYMENT FROM JANE M DOE CONF 123", "ZELLE PAYMENT FROM JANE Q SMITH CONF 456", "JANE M DOE", "JANE Q SMITH"],
+    ["ZELLE FROM J DOE", "ZELLE FROM K ROE", "J DOE", "K ROE"],
+  ])("keeps initials in the payer: %s vs %s", (a, b, nameA, nameB) => {
+    const pa = suggestPattern(a);
+    const pb = suggestPattern(b);
+    expect(pa).not.toBe(pb);
+    expect(pa).toContain(nameA);
+    expect(pb).toContain(nameB);
+    expect(norm(a)).toContain(pa);
+  });
   it("caps a long payee at 5 words", () => {
     expect(suggestPattern("TRANSFER TO ALPHA BRAVO CHARLIE DELTA ECHO FOXTROT")).toBe("ALPHA BRAVO CHARLIE DELTA ECHO");
   });
@@ -187,6 +208,12 @@ describe("addStylistTerm", () => {
     expect(stylistTerms(s)).toEqual(["JANE DOE", "ZELLE PAYMENT FROM DOE JANE"]);
     expect(matchStylist(tx("ZELLE PAYMENT FROM DOE, JANE"), [s])?.id).toBe("jd");
     expect(matchStylist(tx("ZELLE PAYMENT FROM SMITH, JANE"), [s])).toBeNull();
+  });
+
+  it("keeps a comma'd stylist name as one term (no bare first name)", () => {
+    const doe = { name: "Doe, Jane", matchText: null };
+    expect(addStylistTerm(doe, "ZELLE FROM J DOE")).toBe("Doe Jane, ZELLE FROM J DOE");
+    expect(addStylistTerm(doe, "DOE; JANE")).toBeNull(); // the same as the name
   });
 
   it("treats ; and newlines the same way", () => {
