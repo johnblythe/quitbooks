@@ -22,7 +22,13 @@ import { chunk, groupInbox } from "./inbox";
 const { transactions, categories } = schema;
 
 export const SUGGEST_MODEL = "claude-haiku-5-5";
-export const SUGGEST_MAX_TOKENS = 4000;
+/**
+ * Haiku 5.5 runs adaptive thinking by default (effort "low" thins it out but doesn't turn it off),
+ * and thinking counts toward max_tokens. An answer is roughly 40 tokens a group, so a 16-group
+ * batch needs under 1,000; the rest is headroom for thinking. A batch that still runs out is split
+ * and retried (see suggestCategories).
+ */
+export const SUGGEST_MAX_TOKENS = 8000;
 /** Most uncategorized rows considered per run (newest first), matching the Inbox cap. */
 export const SUGGEST_ROW_LIMIT = 2000;
 const EXAMPLE_ROWS_SCANNED = 300;
@@ -260,18 +266,29 @@ export async function suggestCategories(opts: { db: Db; client?: SuggestClient }
       ...oneOffs.map((r) => ({ key: `row|${r.id}`, ids: [r.id] })),
     ];
 
-    for (const batch of chunk(all, MAX_GROUPS_PER_REQUEST)) {
+    const queue = chunk(all, MAX_GROUPS_PER_REQUEST);
+    while (queue.length) {
+      const batch = queue.shift()!;
       result.batches++;
       const r = await suggestForGroups({
         db,
         client: opts.client,
         groups: batch,
       });
-      if ("error" in r) {
-        result.error = r.error;
-        break; // auth, rate-limit and outage errors would repeat; try again next run
+      if (!("error" in r)) {
+        result.suggested += r.suggestedRows;
+        continue;
       }
-      result.suggested += r.suggestedRows;
+      // The answer didn't fit: retry the batch as two halves.
+      if (r.error === "model_max_tokens" && batch.length > 1) {
+        const mid = Math.ceil(batch.length / 2);
+        queue.unshift(batch.slice(0, mid), batch.slice(mid));
+        continue;
+      }
+      result.error = r.error;
+      // Auth, rate-limit, outage and missing-key errors would repeat for every batch; try again next run.
+      if (r.error === "no_api_key" || r.error.startsWith("api_error_")) break;
+      // Anything else (a refusal, one group that still doesn't fit) skips this batch for this run only.
     }
   } catch (e) {
     result.error = logError(e);

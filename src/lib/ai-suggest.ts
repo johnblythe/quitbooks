@@ -24,7 +24,8 @@ export type SuggestGroup = {
 
 export const MAX_EXAMPLES = 30;
 export const MAX_SAMPLES = 3;
-export const MAX_GROUPS_PER_REQUEST = 60;
+/** Groups per background request: small enough that the answer plus thinking fits SUGGEST_MAX_TOKENS. */
+export const MAX_GROUPS_PER_REQUEST = 16;
 const MAX_TEXT_CHARS = 120;
 
 export const SUGGEST_SYSTEM = [

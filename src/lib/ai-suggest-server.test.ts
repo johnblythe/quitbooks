@@ -9,6 +9,7 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
+import { MAX_GROUPS_PER_REQUEST } from "./ai-suggest";
 import { SUGGEST_MAX_TOKENS, SUGGEST_MODEL, suggestCategories, suggestForGroups, type SuggestClient } from "./ai-suggest-server";
 
 const { transactions, categories } = schema;
@@ -23,19 +24,30 @@ let oldCat: string;
 type Group = { key: string; direction: "in" | "out" };
 type Call = Parameters<SuggestClient["messages"]["parse"]>[0];
 
-/** Fake model: answers every group with a fixed kind-appropriate category (or per-test override). */
-function fake(over?: (groups: Group[], call: number) => unknown, stop = "end_turn") {
+const groupsOf = (call: Call): Group[] => {
+  const content = String((call.messages[0] as { content: string }).content);
+  return JSON.parse(content.slice(content.indexOf("{"))).groups;
+};
+const groupCount = (call: Call) => groupsOf(call).length;
+
+/**
+ * Fake model: answers every group with a fixed kind-appropriate category (or per-test override).
+ * `stop` is the stop_reason, or a function of the request's groups and the call number.
+ */
+function fake(
+  over?: (groups: Group[], call: number) => unknown,
+  stop: string | ((groups: Group[], call: number) => string) = "end_turn",
+) {
   const calls: Call[] = [];
   const client: SuggestClient = {
     messages: {
       parse: async (params) => {
         calls.push(params);
-        const content = String((params.messages[0] as { content: string }).content);
-        const groups: Group[] = JSON.parse(content.slice(content.indexOf("{"))).groups;
+        const groups = groupsOf(params);
         const parsed = over
           ? await over(groups, calls.length)
           : { suggestions: groups.map((g) => ({ key: g.key, categoryId: g.direction === "in" ? rent : supplies })) };
-        return { stop_reason: stop, parsed_output: parsed };
+        return { stop_reason: typeof stop === "function" ? stop(groups, calls.length) : stop, parsed_output: parsed };
       },
     },
   };
@@ -48,6 +60,15 @@ async function add(description: string, amountCents: number, extra: Partial<type
     .values({ date: "2026-10-01", amountCents, description, source: "csv", ...extra })
     .returning({ id: transactions.id });
   return r.id;
+}
+/** `n` one-off vendors with distinct patterns, all on the same date. */
+async function addVendors(n: number): Promise<string[]> {
+  const ids: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const w = `${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26))}`;
+    ids.push(await add(`VENDOR${w} SHOP`, -100 - i));
+  }
+  return ids;
 }
 const suggestionOf = async (id: string) =>
   (
@@ -151,20 +172,60 @@ describe("suggestCategories", () => {
     expect((await suggestionOf(a)).s).toBeNull();
   });
 
-  it("batches at 60 groups per request", async () => {
-    const ids: string[] = [];
-    for (let i = 0; i < 130; i++) {
-      const w = `${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26))}`;
-      ids.push(await add(`VENDOR${w} SHOP`, -100 - i));
-    }
+  it("batches at 16 groups per request", async () => {
+    await addVendors(130);
     const { client, calls } = fake();
     const r = await suggestCategories({ db, client });
-    expect(r).toEqual({ requested: 130, suggested: 130, batches: 3 });
-    const sizes = calls.map((c) => {
-      const t = String((c.messages[0] as { content: string }).content);
-      return JSON.parse(t.slice(t.indexOf("{"))).groups.length;
-    });
-    expect(sizes).toEqual([60, 60, 10]);
+    expect(MAX_GROUPS_PER_REQUEST).toBe(16);
+    expect(r).toEqual({ requested: 130, suggested: 130, batches: 9 });
+    expect(calls.map(groupCount)).toEqual([16, 16, 16, 16, 16, 16, 16, 16, 2]);
+  });
+
+  it("splits a batch that hits max_tokens and retries the halves", async () => {
+    await addVendors(10);
+    const { client, calls } = fake(undefined, (groups) => (groups.length > 3 ? "max_tokens" : "end_turn"));
+    const r = await suggestCategories({ db, client });
+    expect(r).toEqual({ requested: 10, suggested: 10, batches: 7 });
+    expect(calls.map(groupCount)).toEqual([10, 5, 3, 2, 5, 3, 2]);
+  });
+
+  it("skips one group that never fits, without blocking the batches after it", async () => {
+    // Newest row, so it lands in the first batch.
+    const poison = await add("POISON VENDOR", -999, { date: "2026-10-05" });
+    const ids = await addVendors(19);
+    const poisonKey = (groups: Group[]) => groups.some((g) => g.key === `row|${poison}`);
+    const { client, calls } = fake(undefined, (groups) => (poisonKey(groups) ? "max_tokens" : "end_turn"));
+    const r = await suggestCategories({ db, client });
+    expect(r).toMatchObject({ requested: 20, suggested: 19, error: "model_max_tokens" });
+    expect(poisonKey(groupsOf(calls[0]))).toBe(true);
+    expect(calls.filter((c) => groupCount(c) === 1 && poisonKey(groupsOf(c)))).toHaveLength(1);
+    expect(groupCount(calls[calls.length - 1])).toBe(4); // the second batch still ran
+    expect(await suggestionOf(poison)).toEqual({ s: null, at: null }); // retried next run
+    for (const id of ids) expect((await suggestionOf(id)).s).toBe(supplies);
+  });
+
+  it("skips a refused batch and carries on", async () => {
+    await addVendors(20);
+    const { client, calls } = fake(undefined, (_groups, call) => (call === 1 ? "refusal" : "end_turn"));
+    const r = await suggestCategories({ db, client });
+    expect(r).toEqual({ requested: 20, suggested: 4, batches: 2, error: "model_refusal" });
+    expect(calls.map(groupCount)).toEqual([16, 4]);
+  });
+
+  it("stops at the first API error (it would repeat for every batch)", async () => {
+    await addVendors(20);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let n = 0;
+    const client: SuggestClient = {
+      messages: {
+        parse: async () => {
+          n++;
+          throw Anthropic.APIError.generate(401, { type: "error", error: { type: "authentication_error", message: "x" } }, "x", new Headers());
+        },
+      },
+    };
+    expect(await suggestCategories({ db, client })).toMatchObject({ batches: 1, suggested: 0, error: "api_error_401" });
+    expect(n).toBe(1);
   });
 
   it("drops invalid model answers (wrong kind, archived, unknown)", async () => {
