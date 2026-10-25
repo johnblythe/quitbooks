@@ -23,7 +23,8 @@ async function main() {
   try {
     const token = arg("connect");
     if (token) {
-      const { connectionId } = await connectBank({ db }, token, { label: "Demo" });
+      const { connectionId, accountsError } = await connectBank({ db }, token, { label: "Demo" });
+      if (accountsError) console.log(`Linked, but the accounts didn't load: ${accountsError}`);
       const accounts = await db.select().from(schema.bankAccounts).where(eq(schema.bankAccounts.connectionId, connectionId));
       const want = (arg("include") ?? "all").split(",").map((s) => s.trim());
       const ids = accounts.filter((a) => want.includes("all") || want.includes(a.name) || want.includes(a.externalId)).map((a) => a.id);
@@ -40,6 +41,7 @@ async function main() {
       const r = await syncConnection({ db }, c.id);
       console.log(`${c.label}: inserted ${r.inserted}, linked ${r.linked}, skipped ${r.skipped}, errors ${r.errors.length}`);
       for (const e of r.errors) console.log(`  error: ${e}`);
+      for (const w of r.warnings) console.log(`  warning: ${w}`);
       if (r.errors.length) failed = true;
       const accts = await db.select().from(schema.bankAccounts).where(eq(schema.bankAccounts.connectionId, c.id));
       for (const a of accts.filter((x) => x.include)) {

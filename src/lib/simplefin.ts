@@ -134,12 +134,32 @@ export async function fetchAccountSet(
   return json as SfAccountSet;
 }
 
-/** All error messages from a response (structured `errlist` and legacy `errors`), redacted. */
-export function collectErrors(set: Pick<SfAccountSet, "errors" | "errlist">): string[] {
-  const out: string[] = [];
-  for (const e of set.errlist ?? []) out.push(redactSecrets([e.code, e.msg].filter(Boolean).join(": ")));
-  for (const e of set.errors ?? []) if (typeof e === "string") out.push(redactSecrets(e));
-  return out.filter(Boolean);
+/**
+ * A response's error messages, redacted and split in two. `errors`: errlist entries that name one of
+ * our accounts (`ours`: SimpleFIN account ids) or the connection one of them is under. `warnings`:
+ * everything else, such as another bank on the same Bridge account, or a message that names nothing.
+ * Only `errors` should fail a sync.
+ */
+export function classifyErrors(
+  set: Pick<SfAccountSet, "accounts" | "errors" | "errlist">,
+  ours: ReadonlySet<string>,
+): { errors: string[]; warnings: string[] } {
+  const connIds = new Set(set.accounts.flatMap((a) => (ours.has(String(a.id)) && a.conn_id ? [String(a.conn_id)] : [])));
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  for (const e of set.errlist ?? []) {
+    const msg = redactSecrets([e.code, e.msg].filter(Boolean).join(": "));
+    if (!msg) continue;
+    const mine = (e.account_id != null && ours.has(String(e.account_id))) || (e.conn_id != null && connIds.has(String(e.conn_id)));
+    (mine ? errors : warnings).push(msg);
+  }
+  for (const e of set.errors ?? []) {
+    if (typeof e !== "string" || !e) continue;
+    const msg = redactSecrets(e);
+    // The legacy list can repeat an errlist message; don't show it twice.
+    if (![...errors, ...warnings].some((m) => m.includes(msg))) warnings.push(msg);
+  }
+  return { errors, warnings };
 }
 
 // ---------- pure mapping ----------

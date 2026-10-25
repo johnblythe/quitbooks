@@ -8,22 +8,29 @@ export const BRIDGE_FIX_URL = "https://beta-bridge.simplefin.org";
 export type BankHealthInput = {
   lastSyncedAt: Date | null;
   lastError: string | null;
+  /** SimpleFIN problems that didn't stop the sync (another bank on the same Bridge, say). */
+  lastWarning: string | null;
   createdAt: Date;
   /** False while setup isn't finished (no account chosen): nothing to be stale about. */
   active: boolean;
 };
 
-/** Message for the "needs attention" banner, or null when the feed is healthy. */
-export function bankAttention(c: BankHealthInput, now: Date): string | null {
+/** "bad": the feed is failing or stale. "warn": it synced, but SimpleFIN reported something else. */
+export type BankAttention = { tone: "bad" | "warn"; message: string };
+
+/** What the attention banner shows, or null when the feed is healthy. */
+export function bankAttention(c: BankHealthInput, now: Date): BankAttention | null {
   if (!c.active) return null;
-  if (c.lastError) return c.lastError;
+  if (c.lastError) return { tone: "bad", message: c.lastError };
   const ref = c.lastSyncedAt ?? c.createdAt;
   const ageDays = (now.getTime() - ref.getTime()) / 86_400_000;
   if (ageDays > STALE_DAYS) {
-    return c.lastSyncedAt
-      ? `The last successful sync was more than ${STALE_DAYS} days ago.`
-      : `It has never synced successfully.`;
+    return {
+      tone: "bad",
+      message: c.lastSyncedAt ? `The last successful sync was more than ${STALE_DAYS} days ago.` : `It has never synced successfully.`,
+    };
   }
+  if (c.lastWarning) return { tone: "warn", message: c.lastWarning };
   return null;
 }
 

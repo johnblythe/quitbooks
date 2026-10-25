@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { connectBankAction, disconnectBankAction, saveBankSetupAction, syncBankNowAction } from "@/app/actions/bank";
+import { connectBankAction, disconnectBankAction, refreshBankAccountsAction, saveBankSetupAction, syncBankNowAction } from "@/app/actions/bank";
 import { Button, ErrorText, Field, Money, Pill, inputClass } from "@/components/ui";
 import { formatDate } from "@/lib/dates";
 
@@ -19,6 +19,7 @@ export type BankCardConnection = {
   cutoverDate: string;
   lastSyncedAt: string | null; // preformatted
   lastError: string | null;
+  lastWarning: string | null;
   active: boolean;
   accounts: BankCardAccount[];
 };
@@ -68,7 +69,43 @@ export function ConnectForm() {
   );
 }
 
+function DisconnectForm({ connectionId }: { connectionId: string }) {
+  return (
+    <form action={disconnectBankAction}>
+      <input type="hidden" name="connectionId" value={connectionId} />
+      <p className="mb-2 text-xs text-ink-2">Disconnecting removes the link and its saved credentials. Transactions already in your books stay.</p>
+      <Button type="submit" variant="danger">
+        Disconnect
+      </Button>
+    </form>
+  );
+}
+
+/** The token was claimed but the account list didn't load: retry with the saved link, or start over. */
+function NoAccounts({ conn }: { conn: BankCardConnection }) {
+  const [state, action, pending] = useActionState(refreshBankAccountsAction, undefined);
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-ink-2">The bank is linked, but SimpleFIN hasn&apos;t sent its accounts yet.</p>
+      {conn.lastError && !state ? <ErrorText>{conn.lastError}</ErrorText> : null}
+      <form action={action} className="space-y-2">
+        <input type="hidden" name="connectionId" value={conn.id} />
+        <Status state={state} />
+        <Button type="submit" disabled={pending}>
+          {pending ? "Loading…" : "Try again"}
+        </Button>
+      </form>
+      <DisconnectForm connectionId={conn.id} />
+    </div>
+  );
+}
+
 export function SetupForm({ conn }: { conn: BankCardConnection }) {
+  if (!conn.accounts.length) return <NoAccounts conn={conn} />;
+  return <AccountSetup conn={conn} />;
+}
+
+function AccountSetup({ conn }: { conn: BankCardConnection }) {
   const [state, action, pending] = useActionState(saveBankSetupAction, undefined);
   return (
     <form action={action} className="space-y-4">
@@ -123,7 +160,13 @@ export function ConnectedView({ conn }: { conn: BankCardConnection }) {
           {conn.lastSyncedAt ? `Last synced ${conn.lastSyncedAt}` : "Not synced yet"} · from {formatDate(conn.cutoverDate)}
         </span>
       </div>
-      {conn.lastError ? <ErrorText>{conn.lastError}</ErrorText> : null}
+      {conn.lastError ? (
+        <ErrorText>{conn.lastError}</ErrorText>
+      ) : conn.lastWarning ? (
+        <p role="status" className="rounded-xl bg-warn-bg px-3 py-2 text-sm text-warn">
+          Synced. SimpleFIN also reported: {conn.lastWarning}
+        </p>
+      ) : null}
       <ul className="divide-y divide-line">
         {included.map((a) => (
           <li key={a.id} className="flex items-center gap-3 py-2">
@@ -138,13 +181,7 @@ export function ConnectedView({ conn }: { conn: BankCardConnection }) {
           <SetupForm conn={conn} />
         </div>
       </details>
-      <form action={disconnectBankAction}>
-        <input type="hidden" name="connectionId" value={conn.id} />
-        <p className="mb-2 text-xs text-ink-2">Disconnecting removes the link and its saved credentials. Transactions already in your books stay.</p>
-        <Button type="submit" variant="danger">
-          Disconnect
-        </Button>
-      </form>
+      <DisconnectForm connectionId={conn.id} />
     </div>
   );
 }

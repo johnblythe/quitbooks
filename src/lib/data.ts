@@ -9,7 +9,7 @@ import { defaultCutover } from "./bank-status";
 import { monthEnd, monthStart, todayIso, type IsoDate, type MonthKey } from "./dates";
 import { INBOX_LIMIT } from "./inbox";
 import type { MetricTx } from "./metrics";
-import { bankAttention } from "./bank-status";
+import { bankAttention, type BankAttention } from "./bank-status";
 import { verifySession } from "./auth";
 
 /**
@@ -228,6 +228,7 @@ export async function getBankConnection() {
       lastSyncedAt: bankConnections.lastSyncedAt,
       lastError: bankConnections.lastError,
       lastErrorAt: bankConnections.lastErrorAt,
+      lastWarning: bankConnections.lastWarning,
       createdAt: bankConnections.createdAt,
     })
     .from(bankConnections)
@@ -252,11 +253,14 @@ export async function getBankConnection() {
 
 export type BankConnectionView = NonNullable<Awaited<ReturnType<typeof getBankConnection>>>;
 
-/** Banner text when the feed needs attention (error, or no good sync for 3+ days), else null. */
-export async function getBankAttention(): Promise<string | null> {
+/** Banner content when the feed needs attention (error, no good sync for 3+ days, or a SimpleFIN warning), else null. */
+export async function getBankAttention(): Promise<BankAttention | null> {
   const c = await getBankConnection();
   if (!c) return null;
-  return bankAttention({ lastSyncedAt: c.lastSyncedAt, lastError: c.lastError, createdAt: c.createdAt, active: c.active }, new Date());
+  return bankAttention(
+    { lastSyncedAt: c.lastSyncedAt, lastError: c.lastError, lastWarning: c.lastWarning, createdAt: c.createdAt, active: c.active },
+    new Date(),
+  );
 }
 
 /** Latest default start date suggestion for a new connection: day after the newest transaction, else 90 days ago. */

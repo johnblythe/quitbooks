@@ -63,7 +63,7 @@ After the first deploy: sign in, set chairs and the BMO opening balance in Setti
 | `npm run db:migrate` | Apply migrations (Neon or PGlite) |
 | `npm run db:seed` | Starter categories and settings (idempotent) |
 | `npm run db:demo` | Sample data, PGlite only |
-| `npm run db:wipe -- --yes` | Delete transactions, import batches, rules, CSV mappings and stylists (keeps users, categories, settings) |
+| `npm run db:wipe -- --yes` | Delete transactions, import batches, rules, CSV mappings and stylists, and make the bank feed's next sync re-fetch from its start date (keeps users, categories, settings and the bank link) |
 | `npm run fake:bmo` | Generate a fabricated BMO CSV plus a `.truth.json` (see flags in `scripts/fake-bmo-csv.ts`; committed samples live in `fixtures/`) |
 | `npm run fake:load -- <truth.json>` | Load the fake roster, chair count and opening balance (PGlite only unless `--yes`). Import the CSV through the app |
 | `npm run fake:score -- <csv> <truth.json>` | Score the importer and categorizer against a truth file |

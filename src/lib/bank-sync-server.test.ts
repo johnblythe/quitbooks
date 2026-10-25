@@ -7,10 +7,22 @@ import { PGlite } from "@electric-sql/pglite";
 import { count, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
-import { activeCutoverDate, connectBank, disconnectBank, fetchStartDate, saveBankSelection, syncAllConnections, syncConnection, syncConnectionThrottled, type SyncDeps } from "./bank-sync-server";
+import {
+  activeCutoverDate,
+  connectBank,
+  csvCutoverDate,
+  disconnectBank,
+  fetchStartDate,
+  refreshBankAccounts,
+  saveBankSelection,
+  syncAllConnections,
+  syncConnection,
+  syncConnectionThrottled,
+  type SyncDeps,
+} from "./bank-sync-server";
 import { defaultCutover } from "./bank-status";
 import { decryptSecret } from "./bank-crypto";
 import type { SfAccountSet } from "./simplefin";
@@ -26,13 +38,17 @@ const NOW = new Date("2026-10-26T15:00:00Z");
 let client: PGlite;
 let db: Db;
 
-type Fake = { fetchFn: typeof fetch; gets: URL[]; mode: { set: SfAccountSet; status?: number; throwMsg?: string } };
+type Fake = { fetchFn: typeof fetch; gets: URL[]; posts: string[]; mode: { set: SfAccountSet; status?: number; throwMsg?: string } };
 
 function fakeBank(set: SfAccountSet = fixture): Fake {
   const gets: URL[] = [];
+  const posts: string[] = [];
   const mode: Fake["mode"] = { set };
   const fetchFn = (async (input: string, init?: RequestInit) => {
-    if (init?.method === "POST") return new Response(ACCESS);
+    if (init?.method === "POST") {
+      posts.push(String(input));
+      return new Response(ACCESS);
+    }
     const u = new URL(String(input));
     gets.push(u);
     if (mode.throwMsg) throw new Error(mode.throwMsg);
@@ -48,17 +64,26 @@ function fakeBank(set: SfAccountSet = fixture): Fake {
     };
     return new Response(JSON.stringify(body));
   }) as unknown as typeof fetch;
-  return { fetchFn, gets, mode };
+  return { fetchFn, gets, posts, mode };
 }
 
 const deps = (f: Fake, now = NOW): SyncDeps => ({ db, fetchFn: f.fetchFn, now, key });
+const TODAY = "2026-10-26";
+
+async function select(connectionId: string, cutover: string, include: string[]) {
+  const accts = await db.select().from(bankAccounts).where(eq(bankAccounts.connectionId, connectionId));
+  const ids = accts.filter((a) => include.includes(a.externalId)).map((a) => a.id);
+  await saveBankSelection(db, connectionId, { includeAccountIds: ids, cutoverDate: cutover }, { today: TODAY });
+}
 
 async function setup(f: Fake, cutover = "2026-09-01", include = ["Demo Checking"]) {
   const { connectionId } = await connectBank(deps(f), TOKEN);
-  const accts = await db.select().from(bankAccounts).where(eq(bankAccounts.connectionId, connectionId));
-  await saveBankSelection(db, connectionId, { includeAccountIds: accts.filter((a) => include.includes(a.externalId)).map((a) => a.id), cutoverDate: cutover });
+  await select(connectionId, cutover, include);
   return connectionId;
 }
+
+const startDay = (u: URL) => new Date(Number(u.searchParams.get("start-date")) * 1000).toISOString().slice(0, 10);
+const savingsTxs = fixture.accounts.find((a) => a.id === "Demo Savings")!.transactions!;
 
 const checkingTxs = fixture.accounts.find((a) => a.id === "Demo Checking")!.transactions!;
 async function txCount() {
@@ -77,8 +102,12 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   await db.delete(transactions);
-  await db.delete(bankConnections); // cascades accounts + runs
+  await db.delete(bankConnections); // cascades runs; accounts are kept (detached)
+  await db.delete(bankAccounts);
   await db.delete(rules);
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("connect", () => {
@@ -102,7 +131,7 @@ describe("connect", () => {
     const f = fakeBank();
     const id = await setup(f, "2026-09-01", []);
     const gets = f.gets.length;
-    expect(await syncConnection(deps(f), id)).toEqual({ inserted: 0, linked: 0, skipped: 0, errors: [] });
+    expect(await syncConnection(deps(f), id)).toEqual({ inserted: 0, linked: 0, skipped: 0, errors: [], warnings: [] });
     expect(f.gets.length).toBe(gets);
     expect(await activeCutoverDate(db)).toBeNull();
   });
@@ -215,7 +244,7 @@ describe("syncConnection", () => {
     await syncConnection(deps(f), id);
     const [good] = await db.select().from(bankConnections);
 
-    f.mode.set = { ...fixture, errlist: [{ code: "con.auth", msg: "Please re-authenticate with your bank." }] };
+    f.mode.set = { ...fixture, errlist: [{ code: "con.auth", msg: "Please re-authenticate with your bank.", conn_id: "CON-SIMPLEFIN-DEMO" }] };
     const r = await syncConnection(deps(f, new Date(NOW.getTime() + 86_400_000)), id);
     expect(r.errors).toEqual(["con.auth: Please re-authenticate with your bank."]);
     const [bad] = await db.select().from(bankConnections);
@@ -289,7 +318,7 @@ describe("throttle, cron, disconnect", () => {
     const f = fakeBank();
     await setup(f);
     const out = await syncAllConnections(deps(f));
-    expect(out).toEqual({ connections: 1, inserted: checkingTxs.length, linked: 0, skipped: expect.any(Number), errors: 0 });
+    expect(out).toEqual({ connections: 1, inserted: checkingTxs.length, linked: 0, skipped: expect.any(Number), errors: 0, warnings: 0 });
   });
 
   it("reports the active cutover and disconnect keeps transactions", async () => {
@@ -299,8 +328,179 @@ describe("throttle, cron, disconnect", () => {
     await syncConnection(deps(f), id);
     await disconnectBank(db, id);
     expect(await txCount()).toBe(checkingTxs.length);
-    expect((await db.select({ n: count() }).from(bankAccounts))[0].n).toBe(0);
+    // Accounts stay, detached and not included, so feed rows keep their account.
+    const kept = await db.select().from(bankAccounts);
+    expect(kept).toHaveLength(3);
+    expect(kept.every((a) => a.connectionId === null && !a.include)).toBe(true);
     expect((await db.select({ n: count() }).from(bankConnections))[0].n).toBe(0);
     expect(await activeCutoverDate(db)).toBeNull();
+  });
+});
+
+describe("start date and account changes after a sync (F1)", () => {
+  it("an earlier start date makes the next sync fetch from it, even though it synced recently", async () => {
+    const f = fakeBank();
+    const id = await setup(f, "2026-10-20");
+    await syncConnection(deps(f), id);
+    const firstPass = await txCount();
+    expect(firstPass).toBeLessThan(checkingTxs.length);
+
+    await select(id, "2026-09-01", ["Demo Checking"]);
+    expect((await db.select().from(bankConnections))[0].fullSyncPending).toBe(true);
+    f.gets.length = 0;
+    const r = await syncConnection(deps(f, new Date(NOW.getTime() + 3600_000)), id);
+    expect(startDay(f.gets[0])).toBe("2026-08-31"); // the new start date, minus the 1-day tz margin
+    expect(r.inserted).toBe(checkingTxs.length - firstPass);
+    expect(await txCount()).toBe(checkingTxs.length);
+    expect((await db.select().from(bankConnections))[0].fullSyncPending).toBe(false);
+
+    // Back to the normal 7-day overlap afterwards.
+    f.gets.length = 0;
+    await syncConnection(deps(f, new Date(NOW.getTime() + 2 * 3600_000)), id);
+    expect(startDay(f.gets[0])).toBe("2026-10-18");
+  });
+
+  it("a newly included account is fetched from the start date", async () => {
+    const f = fakeBank();
+    const id = await setup(f, "2026-09-01");
+    await syncConnection(deps(f), id);
+    await select(id, "2026-09-01", ["Demo Checking", "Demo Savings"]);
+    f.gets.length = 0;
+    const r = await syncConnection(deps(f, new Date(NOW.getTime() + 3600_000)), id);
+    expect(startDay(f.gets[0])).toBe("2026-08-31");
+    expect(r.inserted).toBe(savingsTxs.length);
+    expect(await txCount()).toBe(checkingTxs.length + savingsTxs.length);
+  });
+
+  it("a later start date or dropping an account doesn't trigger a full fetch", async () => {
+    const f = fakeBank();
+    const id = await setup(f, "2026-09-01", ["Demo Checking", "Demo Savings"]);
+    await syncConnection(deps(f), id);
+    await select(id, "2026-09-15", ["Demo Checking"]);
+    expect((await db.select().from(bankConnections))[0].fullSyncPending).toBe(false);
+  });
+
+  it("caps how far back a full fetch can start (SimpleFIN allows 24 requests a day)", async () => {
+    const f = fakeBank();
+    const { connectionId } = await connectBank(deps(f), TOKEN);
+    await expect(select(connectionId, "2025-10-01", ["Demo Checking"])).rejects.toThrow(/at most a year back. Pick Oct 26, 2025 or later/);
+    await select(connectionId, "2025-10-26", ["Demo Checking"]);
+    f.gets.length = 0;
+    await syncConnection(deps(f), connectionId);
+    expect(f.gets.length).toBeLessThanOrEqual(9);
+  });
+});
+
+describe("no duplicate feed rows (F2)", () => {
+  it("disconnect then reconnect of the same SimpleFIN accounts doesn't import twice", async () => {
+    const f = fakeBank();
+    const id = await setup(f);
+    await syncConnection(deps(f), id);
+    const [before] = await db.select().from(bankAccounts).where(eq(bankAccounts.externalId, "Demo Checking"));
+    await disconnectBank(db, id);
+
+    const id2 = await setup(f, "2026-09-01");
+    expect(id2).not.toBe(id);
+    const [after] = await db.select().from(bankAccounts).where(eq(bankAccounts.externalId, "Demo Checking"));
+    expect(after.id).toBe(before.id); // re-attached, not re-created
+    expect(after.connectionId).toBe(id2);
+    expect((await db.select({ n: count() }).from(bankAccounts))[0].n).toBe(3);
+
+    const r = await syncConnection(deps(f, new Date(NOW.getTime() + 3600_000)), id2);
+    expect(r.errors).toEqual([]);
+    expect(r.inserted).toBe(0);
+    expect(await txCount()).toBe(checkingTxs.length);
+  });
+
+  it("rejects a start date on or before the last CSV row", async () => {
+    const f = fakeBank();
+    const { connectionId } = await connectBank(deps(f), TOKEN);
+    await db.insert(transactions).values({ date: "2026-08-31", amountCents: -100, description: "CSV ROW", source: "csv", dedupeHash: "h1" });
+    await expect(select(connectionId, "2026-08-31", ["Demo Checking"])).rejects.toThrow(
+      "Your imported CSV goes through Aug 31, 2026. Start the feed on Sep 1, 2026 or later.",
+    );
+    await expect(select(connectionId, "2026-08-01", ["Demo Checking"])).rejects.toThrow(/goes through Aug 31, 2026/);
+    await select(connectionId, "2026-09-01", ["Demo Checking"]);
+    expect(await activeCutoverDate(db)).toBe("2026-09-01");
+  });
+
+  it("the CSV guard covers feed rows from before a later-moved start date", async () => {
+    const f = fakeBank();
+    expect(await csvCutoverDate(db)).toBeNull();
+    const id = await setup(f, "2026-09-01");
+    expect(await csvCutoverDate(db)).toBe("2026-09-01");
+    await syncConnection(deps(f), id);
+    const [earliest] = (await db.select({ d: transactions.date }).from(transactions)).map((r) => r.d).sort();
+    await select(id, "2026-10-20", ["Demo Checking"]);
+    expect(await activeCutoverDate(db)).toBe("2026-10-20");
+    expect(earliest < "2026-10-20").toBe(true);
+    expect(await csvCutoverDate(db)).toBe(earliest);
+  });
+});
+
+describe("connect never wastes the one-time token (F6)", () => {
+  it("checks BANK_TOKEN_KEY before claiming", async () => {
+    vi.stubEnv("BANK_TOKEN_KEY", "");
+    const f = fakeBank();
+    await expect(connectBank({ db, fetchFn: f.fetchFn, now: NOW }, TOKEN)).rejects.toThrow(/BANK_TOKEN_KEY/);
+    expect(f.posts).toHaveLength(0);
+    expect((await db.select({ n: count() }).from(bankConnections))[0].n).toBe(0);
+  });
+
+  it("keeps the claimed link when the account fetch fails, and a retry loads the accounts", async () => {
+    const f = fakeBank();
+    f.mode.status = 500;
+    const out = await connectBank(deps(f), TOKEN);
+    expect(out.accountsError).toMatch(/HTTP 500/);
+    expect(f.posts).toHaveLength(1);
+    const [conn] = await db.select().from(bankConnections).where(eq(bankConnections.id, out.connectionId));
+    expect(decryptSecret(conn.accessUrlEnc, key)).toBe(ACCESS);
+    expect(conn.lastError).toMatch(/HTTP 500/);
+    expect((await db.select({ n: count() }).from(bankAccounts))[0].n).toBe(0);
+
+    f.mode.status = undefined;
+    await refreshBankAccounts(deps(f), out.connectionId);
+    expect(f.posts).toHaveLength(1); // no second claim
+    expect((await db.select({ n: count() }).from(bankAccounts).where(eq(bankAccounts.connectionId, out.connectionId)))[0].n).toBe(3);
+    const [fixed] = await db.select().from(bankConnections).where(eq(bankConnections.id, out.connectionId));
+    expect(fixed.lastError).toBeNull();
+    expect(fixed.lastErrorAt).toBeNull();
+  });
+});
+
+describe("errors about other connections are warnings (F10)", () => {
+  it("still syncs and advances last_synced_at, and records the warning", async () => {
+    const f = fakeBank();
+    const id = await setup(f);
+    f.mode.set = { ...fixture, errlist: [{ code: "con.auth", msg: "Chase needs re-authentication.", conn_id: "CON-CHASE" }] };
+    const r = await syncConnection(deps(f), id);
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toEqual(["con.auth: Chase needs re-authentication."]);
+    expect(r.inserted).toBe(checkingTxs.length);
+    const [conn] = await db.select().from(bankConnections);
+    expect(conn.lastSyncedAt?.toISOString()).toBe(NOW.toISOString());
+    expect(conn.lastError).toBeNull();
+    expect(conn.lastWarning).toBe("con.auth: Chase needs re-authentication.");
+
+    f.mode.set = fixture;
+    await syncConnection(deps(f, new Date(NOW.getTime() + 3600_000)), id);
+    expect((await db.select().from(bankConnections))[0].lastWarning).toBeNull();
+  });
+});
+
+describe("a start date in the future (F13)", () => {
+  it("fetches balances only, reports nothing missing, and counts as a good sync", async () => {
+    const f = fakeBank();
+    const id = await setup(f, "2026-11-15");
+    f.gets.length = 0;
+    const r = await syncConnection(deps(f), id);
+    expect(f.gets).toHaveLength(1);
+    expect(f.gets[0].searchParams.get("balances-only")).toBe("1");
+    expect(r).toMatchObject({ inserted: 0, errors: [], warnings: [] });
+    const [conn] = await db.select().from(bankConnections);
+    expect(conn.lastError).toBeNull();
+    expect(conn.lastSyncedAt?.toISOString()).toBe(NOW.toISOString());
+    const [acct] = await db.select().from(bankAccounts).where(eq(bankAccounts.externalId, "Demo Checking"));
+    expect(acct.balanceCents).toBe(2448555);
   });
 });
