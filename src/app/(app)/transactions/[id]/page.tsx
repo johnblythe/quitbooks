@@ -6,7 +6,7 @@ import { TransactionForm } from "@/components/transaction-form";
 import { Button, Card, PageHeader, Skeleton } from "@/components/ui";
 import { getCategories, getStylists, getTransaction } from "@/lib/data";
 import { monthOf } from "@/lib/dates";
-import { canDeleteTransaction } from "@/lib/transaction-delete";
+import { FEED_LOCKED_NOTE, isFeedLinked } from "@/lib/transaction-guards";
 
 export const metadata: Metadata = { title: "Edit transaction" };
 
@@ -26,6 +26,7 @@ async function EditForm({ params }: { params: Promise<{ id: string }> }) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const [tx, categories, stylists] = await Promise.all([getTransaction(id), getCategories({ includeArchived: true }), getStylists()]);
   if (!tx) notFound();
+  const feedLinked = isFeedLinked(tx);
 
   return (
     <div className="space-y-4">
@@ -36,6 +37,7 @@ async function EditForm({ params }: { params: Promise<{ id: string }> }) {
           categories={categories.filter((c) => !c.archived || c.id === tx.categoryId)}
           stylists={stylists.map((s) => ({ id: s.id, name: s.name }))}
           submitLabel="Save changes"
+          lockedNote={feedLinked ? FEED_LOCKED_NOTE : undefined}
         />
       </Card>
       {tx.source === "csv" ? (
@@ -43,7 +45,7 @@ async function EditForm({ params }: { params: Promise<{ id: string }> }) {
           Imported from a bank CSV. If you delete it, importing a file that includes it again will add it back.
         </p>
       ) : null}
-      {canDeleteTransaction(tx.source) ? (
+      {!feedLinked ? (
         <form action={deleteTransaction}>
           <input type="hidden" name="id" value={tx.id} />
           <input type="hidden" name="month" value={monthOf(tx.date)} />

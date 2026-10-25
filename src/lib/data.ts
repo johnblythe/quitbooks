@@ -92,6 +92,7 @@ const txSelect = {
   description: transactions.description,
   note: transactions.note,
   source: transactions.source,
+  externalId: transactions.externalId,
   categoryId: transactions.categoryId,
   stylistId: transactions.stylistId,
   suggestedCategoryId: transactions.suggestedCategoryId,
