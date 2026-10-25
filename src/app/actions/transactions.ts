@@ -11,6 +11,7 @@ import { isIsoDate, monthOf } from "@/lib/dates";
 import { chunk } from "@/lib/inbox";
 import { parseAmountToCents } from "@/lib/money";
 import { IN_ARRAY_CHUNK, applyRules, rememberPattern } from "@/lib/rules-server";
+import { deleteTransactionRow } from "@/lib/transaction-delete";
 
 const { transactions } = schema;
 
@@ -90,12 +91,12 @@ export async function updateTransaction(_prev: TxFormState, formData: FormData):
   redirect(`/transactions?month=${monthOf(date)}`);
 }
 
+/** Bank feed rows are refused (see deleteTransactionRow); the edit page doesn't offer Delete for them. */
 export async function deleteTransaction(formData: FormData) {
   await requireUser();
   const id = z.uuid().parse(formData.get("id"));
   const month = String(formData.get("month") ?? "");
-  const db = await getDb();
-  await db.delete(transactions).where(eq(transactions.id, id));
+  if (!(await deleteTransactionRow(await getDb(), id))) redirect(`/transactions/${id}`);
   redirect(month ? `/transactions?month=${month}` : "/transactions");
 }
 

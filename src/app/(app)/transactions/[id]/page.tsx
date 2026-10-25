@@ -6,6 +6,7 @@ import { TransactionForm } from "@/components/transaction-form";
 import { Button, Card, PageHeader, Skeleton } from "@/components/ui";
 import { getCategories, getStylists, getTransaction } from "@/lib/data";
 import { monthOf } from "@/lib/dates";
+import { canDeleteTransaction } from "@/lib/transaction-delete";
 
 export const metadata: Metadata = { title: "Edit transaction" };
 
@@ -42,13 +43,19 @@ async function EditForm({ params }: { params: Promise<{ id: string }> }) {
           Imported from a bank CSV. If you delete it, importing a file that includes it again will add it back.
         </p>
       ) : null}
-      <form action={deleteTransaction}>
-        <input type="hidden" name="id" value={tx.id} />
-        <input type="hidden" name="month" value={monthOf(tx.date)} />
-        <Button type="submit" variant="danger" className="w-full">
-          Delete transaction
-        </Button>
-      </form>
+      {canDeleteTransaction(tx.source) ? (
+        <form action={deleteTransaction}>
+          <input type="hidden" name="id" value={tx.id} />
+          <input type="hidden" name="month" value={monthOf(tx.date)} />
+          <Button type="submit" variant="danger" className="w-full">
+            Delete transaction
+          </Button>
+        </form>
+      ) : (
+        <p className="px-1 text-xs text-ink-2">
+          From your bank feed. It&apos;s real bank activity, so it can&apos;t be deleted. Give it a category instead.
+        </p>
+      )}
     </div>
   );
 }
