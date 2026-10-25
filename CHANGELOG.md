@@ -66,3 +66,14 @@ All notable changes to this project are documented here, in the [Keep a Changelo
   - large Inbox groups (over 500 rows) no longer get a 400 from the suggestion route;
   - Zelle and transfer patterns keep the payer's name, so two stylists' payments no longer share one Inbox group;
   - "Remember" no longer leaves a bare first name as a stylist match term when the pattern has a comma.
+- PR #1 second review fixes:
+  - a feed-linked row (one with a bank id, including a manual entry the feed matched) keeps its amount and date, and can't be deleted; deleting a row that's already gone goes back to the month instead of a 404;
+  - when SimpleFIN leaves our account out, its real error (e.g. "Please re-authenticate") now shows, matched by the bank login id stored on each account;
+  - a SimpleFIN error that names no account now holds the sync point (amber), so late-posting rows aren't skipped;
+  - Zelle patterns keep initials, so "FROM JANE M DOE" and "FROM JANE Q SMITH" (or "J DOE" and "K ROE") no longer share a group;
+  - the CSV guard still covers feed rows after the bank is disconnected;
+  - SimpleFIN requests stay within 20 per rolling 24 hours, counting the account-list fetch; a backfill that doesn't fit fetches the recent days and catches up later ("Catching up older history tomorrow");
+  - an empty account list right after linking shows SimpleFIN's message, or "SimpleFIN hasn't finished loading your bank yet", instead of "Connected";
+  - background AI suggestions make at most 8 requests a run, stop after 2 failed batches in a row, and don't re-send rows the model refused;
+  - a stylist named like "Doe, Jane" matches "DOE, JANE" again, and remembering a pattern no longer splits the name into a bare "JANE";
+  - the database write right after claiming the one-time SimpleFIN token is retried, so a brief blip doesn't waste the token.
