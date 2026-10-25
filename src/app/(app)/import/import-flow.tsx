@@ -5,28 +5,34 @@ import { useState, useTransition } from "react";
 import { commitImport, previewImport, type ImportPreview, type ImportResult } from "@/app/actions/import";
 import { Button, Card, ErrorText, Field, Money, Pill, inputClass } from "@/components/ui";
 import type { CsvMapping } from "@/lib/csv";
+import { guessKind, resolveRowCategory, type CategoryKind, type FileCategoryChoice } from "@/lib/import-categories";
 import { formatDate } from "@/lib/dates";
 import { coveredNote } from "@/lib/bank-cutover";
 import { MAX_CSV_BYTES, TOO_BIG_MESSAGE } from "@/lib/import-limits";
 
-export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }) {
+export function ImportFlow() {
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
-  const [mapping, setMapping] = useState<CsvMapping | null>(savedMapping);
+  const [mapping, setMapping] = useState<CsvMapping | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** Lines whose "Same transaction" box the user unticked. Matched rows start ticked. */
   const [unlinked, setUnlinked] = useState<Set<number>>(new Set());
   const [ackErrors, setAckErrors] = useState(false);
+  /** What to do with each distinct value of the file's category column, keyed by the server's group key. */
+  const [choices, setChoices] = useState<Record<string, FileCategoryChoice>>({});
   const [pending, startTransition] = useTransition();
 
-  function runPreview(text: string, m: CsvMapping | null) {
+  function runPreview(text: string, m: CsvMapping | null, resetChoices = false) {
     setError(null);
     startTransition(async () => {
       try {
         const p = await previewImport(text, m);
         setPreview(p);
         setMapping(p.mapping);
+        // Keep what the user already picked; only values not seen yet start from the server's default.
+        const defaults = Object.fromEntries(p.categoryGroups.map((g) => [g.key, g.choice]));
+        setChoices((prev) => (resetChoices ? defaults : { ...defaults, ...prev }));
         setUnlinked(new Set());
         setAckErrors(false);
       } catch {
@@ -38,6 +44,7 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
   async function onFile(f: File | undefined) {
     setResult(null);
     setPreview(null);
+    setChoices({});
     setError(null);
     if (!f) return;
     if (f.size > MAX_CSV_BYTES) {
@@ -47,7 +54,7 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
     }
     const text = await f.text();
     setFile({ name: f.name, text });
-    runPreview(text, savedMapping);
+    runPreview(text, null, true);
   }
 
   function updateMapping(patch: Partial<CsvMapping>) {
@@ -60,7 +67,7 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
     };
     const next = { ...base, ...patch };
     setMapping(next);
-    runPreview(file.text, next);
+    runPreview(file.text, next, "categoryColumn" in patch);
   }
 
   const matched = preview?.rows.filter((r) => r.match && !r.duplicate) ?? [];
@@ -68,6 +75,31 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
     .filter((r) => !unlinked.has(r.line))
     .map((r) => ({ line: r.line, transactionId: r.match!.transactionId }));
   const errorCount = preview?.errors.length ?? 0;
+  const groups = preview?.categoryGroups ?? [];
+  const catById = new Map((preview?.categories ?? []).map((c) => [c.id, c]));
+
+  function setChoice(key: string, choice: FileCategoryChoice) {
+    setChoices((prev) => ({ ...prev, [key]: choice }));
+  }
+
+  /** Category and stylist a row will get, given the file category and the current choice for it. */
+  function rowOutcome(r: ImportPreview["rows"][number]): { category: string | null; stylist: string | null; isNew: boolean } {
+    const choice = r.fileCategoryKey ? choices[r.fileCategoryKey] : undefined;
+    if (choice?.type === "new") return { category: choice.name.trim() || null, stylist: null, isNew: true };
+    const out = resolveRowCategory(
+      choice?.type === "existing" ? choice.categoryId : undefined,
+      { categoryId: r.autoCategoryId, stylistId: r.autoStylistId },
+      preview?.boothRentCategoryId ?? null,
+    );
+    if (choice?.type === "existing") {
+      return {
+        category: out.categoryId ? (catById.get(out.categoryId)?.name ?? null) : null,
+        stylist: out.stylistId ? r.stylistName : null,
+        isNew: false,
+      };
+    }
+    return { category: r.categoryName, stylist: r.stylistName, isNew: false };
+  }
   const toInsert = (preview?.newCount ?? 0) - links.length;
   const canImport = !pending && !!mapping && (preview?.newCount ?? 0) > 0 && (errorCount === 0 || ackErrors);
 
@@ -75,7 +107,8 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
     if (!file || !mapping) return;
     startTransition(async () => {
       try {
-        setResult(await commitImport(file.text, mapping, file.name, links, ackErrors));
+        const sent = Object.fromEntries(groups.map((g) => [g.key, choices[g.key] ?? g.choice]));
+        setResult(await commitImport(file.text, mapping, file.name, links, ackErrors, sent));
         setPreview(null);
         setFile(null);
       } catch {
@@ -93,6 +126,10 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
           {result.skipped ? `${result.skipped} were already here and were skipped. ` : ""}
           {result.linked ? `${result.linked} linked to existing entries. ` : ""}
           {result.covered ? `${coveredNote(result.covered)} ` : ""}
+          {result.createdCategories
+            ? `${result.createdCategories} new ${result.createdCategories === 1 ? "category was" : "categories were"} created. `
+            : ""}
+          {result.skippedLines ? `${result.skippedLines} report lines were skipped. ` : ""}
           Anything the rules couldn’t sort is waiting in the Inbox.
         </p>
         {result.errors.length ? (
@@ -156,7 +193,7 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
           <Card title="Columns">
             <div className="grid gap-3 sm:grid-cols-2">
               {select(mapping?.dateColumn, (v) => updateMapping({ dateColumn: v }), "Date")}
-              {select(mapping?.descriptionColumn, (v) => updateMapping({ descriptionColumn: v }), "Description")}
+              {select(mapping?.descriptionColumn, (v) => updateMapping({ descriptionColumn: v }), "Description / name")}
               <Field label="Amounts are in">
                 <select
                   value={mapping?.amountMode ?? "single"}
@@ -175,7 +212,8 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
               ) : (
                 select(mapping?.amountColumn, (v) => updateMapping({ amountColumn: v }), "Amount")
               )}
-              {select(mapping?.memoColumn, (v) => updateMapping({ memoColumn: v || undefined }), "Extra details (optional)")}
+              {select(mapping?.memoColumn, (v) => updateMapping({ memoColumn: v || undefined }), "Memo / extra details (optional)")}
+              {select(mapping?.categoryColumn, (v) => updateMapping({ categoryColumn: v || undefined }), "Category (optional)")}
             </div>
             {mapping?.amountMode !== "split" ? (
               <label className="mt-3 flex items-center gap-2 text-sm">
@@ -191,6 +229,79 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
             <p className="mt-3 text-xs text-ink-2">Saved after your first import, so next time it just works.</p>
           </Card>
 
+          {groups.length ? (
+            <Card
+              title="Categories in this file"
+              action={<span className="text-xs text-ink-2">{groups.length} to map</span>}
+            >
+              <p className="mb-2 text-xs text-ink-2">
+                Pick what each one becomes. These win over your rules. “Leave for Inbox” sorts the rows the usual way.
+              </p>
+              <ul className="max-h-[60vh] divide-y divide-line overflow-y-auto text-sm">
+                {groups.map((g) => {
+                  const choice = choices[g.key] ?? g.choice;
+                  const selectValue = choice.type === "existing" ? choice.categoryId : choice.type;
+                  return (
+                    <li key={g.key} className="space-y-2 py-3">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="min-w-0 truncate font-medium">{g.value}</span>
+                        <span className="shrink-0 text-xs text-ink-2">
+                          {g.count} {g.count === 1 ? "row" : "rows"} · <Money cents={g.netCents} signed />
+                        </span>
+                      </div>
+                      <select
+                        aria-label={`Category for ${g.value}`}
+                        value={selectValue}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === "inbox") setChoice(g.key, { type: "inbox" });
+                          else if (v === "new") setChoice(g.key, { type: "new", name: g.value.slice(0, 60), kind: guessKind(g) });
+                          else setChoice(g.key, { type: "existing", categoryId: v });
+                        }}
+                        className={inputClass}
+                      >
+                        <option value="inbox">Leave for Inbox</option>
+                        <option value="new">Create new…</option>
+                        {(["income", "expense", "transfer"] as const).map((kind) => (
+                          <optgroup key={kind} label={kind[0].toUpperCase() + kind.slice(1)}>
+                            {preview.categories
+                              .filter((c) => c.kind === kind)
+                              .map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                      {choice.type === "new" ? (
+                        <div className="grid grid-cols-[1fr_auto] gap-2">
+                          <input
+                            aria-label={`New category name for ${g.value}`}
+                            value={choice.name}
+                            maxLength={60}
+                            onChange={(e) => setChoice(g.key, { ...choice, name: e.target.value })}
+                            className={inputClass}
+                          />
+                          <select
+                            aria-label={`Kind for ${choice.name || g.value}`}
+                            value={choice.kind}
+                            onChange={(e) => setChoice(g.key, { ...choice, kind: e.target.value as CategoryKind })}
+                            className={inputClass}
+                          >
+                            <option value="income">Income</option>
+                            <option value="expense">Expense</option>
+                            <option value="transfer">Transfer</option>
+                          </select>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          ) : null}
+
           <Card
             title="Preview"
             action={
@@ -201,6 +312,11 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
           >
             {preview.coveredCount ? (
               <p className="mb-3 rounded-lg bg-surface-2 px-3 py-2 text-sm text-ink-2">{coveredNote(preview.coveredCount)}</p>
+            ) : null}
+            {preview.skippedLines ? (
+              <p className="mb-3 rounded-lg bg-surface-2 px-3 py-2 text-sm text-ink-2">
+                {preview.skippedLines} report {preview.skippedLines === 1 ? "line" : "lines"} skipped (headings, totals, footer).
+              </p>
             ) : null}
             {errorCount ? (
               <div className="mb-3 rounded-lg border border-warn/40 p-3 text-sm" role="alert">
@@ -255,7 +371,9 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
               </div>
             ) : null}
             <ul className="max-h-[50vh] divide-y divide-line overflow-y-auto text-sm">
-              {preview.rows.filter((r) => r.duplicate || !r.match).slice(0, 200).map((r) => (
+              {preview.rows.filter((r) => r.duplicate || !r.match).slice(0, 200).map((r) => {
+                const out = rowOutcome(r);
+                return (
                 <li key={r.line} className={`flex items-center justify-between gap-3 py-2 ${r.duplicate ? "opacity-50" : ""}`}>
                   <span className="min-w-0">
                     <span className="block truncate">{r.description}</span>
@@ -263,8 +381,11 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
                       {formatDate(r.date)}
                       {r.duplicate ? (
                         <Pill>Already imported</Pill>
-                      ) : r.categoryName ? (
-                        <span>· {r.stylistName ? `${r.categoryName} · ${r.stylistName}` : r.categoryName}</span>
+                      ) : out.category ? (
+                        <span>
+                          · {out.stylist ? `${out.category} · ${out.stylist}` : out.category}
+                          {out.isNew ? " (new)" : ""}
+                        </span>
                       ) : (
                         <Pill tone="warn">Inbox</Pill>
                       )}
@@ -272,7 +393,8 @@ export function ImportFlow({ savedMapping }: { savedMapping: CsvMapping | null }
                   </span>
                   <Money cents={r.amountCents} signed className={r.amountCents > 0 ? "shrink-0 text-good" : "shrink-0"} />
                 </li>
-              ))}
+                );
+              })}
             </ul>
             {preview.rows.length > 200 ? (
               <p className="mt-2 text-xs text-ink-2">Showing the first 200 of {preview.rows.length} rows.</p>
