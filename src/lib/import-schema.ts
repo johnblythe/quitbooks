@@ -14,7 +14,30 @@ export const csvMappingSchema = z.object({
   creditColumn: column.optional(),
   invertSign: z.boolean().optional(),
   memoColumn: column.optional(),
+  categoryColumn: column.optional(),
+  categoryMap: z
+    .record(
+      z.string().max(300),
+      z.discriminatedUnion("type", [
+        z.object({ type: z.literal("existing"), categoryId: z.uuid() }),
+        z.object({ type: z.literal("inbox") }),
+      ]),
+    )
+    .optional(),
 });
+
+const choice = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("existing"), categoryId: z.uuid() }),
+  z.object({
+    type: z.literal("new"),
+    name: z.string().trim().min(1).max(60),
+    kind: z.enum(["income", "expense", "transfer"]),
+  }),
+  z.object({ type: z.literal("inbox") }),
+]);
+
+/** The import screen's choice per distinct file-category value, keyed by `categoryKey(value)`. */
+export const categoryChoicesSchema = z.record(z.string().max(300), choice);
 
 // A string has at most as many chars as bytes, so this only rejects what is certainly too big;
 // the exact byte check follows.

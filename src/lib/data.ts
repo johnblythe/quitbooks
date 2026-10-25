@@ -18,6 +18,8 @@ import { bankAttention } from "./bank-status";
 const { categories, stylists, transactions, rules, settings, csvMappings, importBatches, bankConnections, bankAccounts } = schema;
 
 export const BMO_MAPPING_NAME = "BMO";
+/** Saved layout for files that carry their own category column (QuickBooks, card exports). */
+export const CATEGORIZED_MAPPING_NAME = "BMO:categories";
 
 export async function getCategories(opts: { includeArchived?: boolean } = {}) {
   await connection();
@@ -176,10 +178,10 @@ export async function getTransactionsInRange(from: IsoDate, to: IsoDate) {
     .orderBy(asc(transactions.date));
 }
 
-export async function getSavedMapping(): Promise<CsvMapping | null> {
+export async function getSavedMapping(name: string = BMO_MAPPING_NAME): Promise<CsvMapping | null> {
   await connection();
   const db = await getDb();
-  const [row] = await db.select().from(csvMappings).where(eq(csvMappings.name, BMO_MAPPING_NAME));
+  const [row] = await db.select().from(csvMappings).where(eq(csvMappings.name, name));
   return row?.mapping ?? null;
 }
 
