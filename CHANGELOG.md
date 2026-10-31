@@ -3,6 +3,7 @@
 ## Release integration — 2026-10-31
 
 - Import mapping review: dated transactions whose payee starts with "Total" are never skipped as report totals; categories hidden after preview are rejected atomically; failed imports keep their file and choices for correction and retry.
+- A QuickBooks report that covers more than one account is now refused with an explanation, because every transfer would be counted twice. Export Transaction Detail by Account for the BMO account only.
 - Rebuilt the splits migration as 0006 after the reviewed bank-sync migrations.
 - Preserved bank amount/date/delete locks on split transactions, with atomic edit guards and regression tests.
 - Added `fake:restore`: reload the committed 439-row BMO fixture through the real importer, without duplicate transactions; documented the local/dev wipe-and-restore cycle.

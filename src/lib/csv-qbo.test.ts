@@ -137,3 +137,57 @@ describe("mappingFits", () => {
     expect(mappingFits(m, ["Date", "Description", "Amount"])).toBe(false);
   });
 });
+
+describe("QuickBooks reports that cover more than one account", () => {
+  const head = "Quiet Salon LLC\nTransaction Detail by Account\n\nDate,Transaction Type,Num,Name,Memo/Description,Split,Amount,Balance\n";
+  const bmo = [
+    "BMO Chequing,,,,,,,",
+    "Beginning Balance,,,,,,,0.00",
+    "01/03/2025,Deposit,,Jane Doe,Zelle,Booth Rent,350.00,350.00",
+  ];
+  const rent = [
+    "Booth Rent,,,,,,,",
+    "Beginning Balance,,,,,,,0.00",
+    "01/03/2025,Deposit,,Jane Doe,Zelle,BMO Chequing,350.00,350.00",
+  ];
+  const expectedError =
+    "This QuickBooks report covers more than one account (BMO Chequing, Booth Rent), so the same money would be counted twice. Run Transaction Detail by Account again for the BMO account only, then import that file.";
+
+  it("refuses a two-account export: no rows, the error comes first, at the second section's first row", () => {
+    const text =
+      head + [...bmo, "Total for BMO Chequing,,,,,,,350.00", ...rent, "Total for Booth Rent,,,,,,,350.00"].join("\n") + "\n";
+    const parsed = parseBankCsv(text);
+    expect(parsed.rows).toEqual([]);
+    expect(parsed.errors[0].message).toBe(expectedError);
+    // header is line 4; BMO heading 5, balance 6, row 7, total 8, "Booth Rent" heading 9
+    expect(parsed.errors[0].line).toBe(9);
+  });
+
+  it("refuses sections even without Total for lines", () => {
+    const parsed = parseBankCsv(head + [...bmo, ...rent].join("\n") + "\n");
+    expect(parsed.rows).toEqual([]);
+    expect(parsed.errors[0].message).toBe(expectedError);
+    expect(parsed.errors[0].line).toBe(8);
+  });
+
+  it("reads the committed single-section sample exactly as before", () => {
+    const parsed = parseBankCsv(sample);
+    expect(parsed.rows).toHaveLength(31);
+    expect(parsed.skippedLines).toBe(4);
+    expect(parsed.errors).toHaveLength(1);
+    expect(parsed.errors[0].message).toMatch(/Unrecognized date/);
+  });
+
+  it("never refuses a plain bank CSV, even with undated, amount-less junk lines", () => {
+    const text = [
+      "Date,Description,Amount",
+      "01/03/2025,Coffee,-4.50",
+      "Account summary,,",
+      "Page 1 of 2,,",
+      "01/04/2025,Salon supplies,-20.00",
+    ].join("\n");
+    const parsed = parseBankCsv(text);
+    expect(parsed.rows).toHaveLength(2);
+    expect(parsed.errors.find((e) => /more than one account/.test(e.message))).toBeUndefined();
+  });
+});

@@ -204,6 +204,23 @@ function isReportLine(record: Record<string, string>, mapping: CsvMapping, hasDa
 }
 
 /**
+ * Name of the report section a furniture row belongs to, or null. QuickBooks writes each account as a
+ * heading row (just the account name) and closes it with "Total for <name>". "Beginning Balance" and
+ * the other furniture rows (grand totals, the "Cash Basis" footer) are not sections.
+ */
+function sectionName(record: Record<string, string>): { name: string; fromTotal: boolean } | null {
+  const first =
+    Object.values(record)
+      .filter((v): v is string => typeof v === "string")
+      .map((c) => c.trim())
+      .find(Boolean) ?? "";
+  const total = /^total for\s+(.+)$/i.exec(first);
+  if (total) return { name: total[1].trim(), fromTotal: true };
+  if (!first || REPORT_FURNITURE.test(first) || /^beginning balance\b/i.test(first)) return null;
+  return { name: first, fromTotal: false };
+}
+
+/**
  * Parses a bank CSV into normalized rows.
  * - If `mapping` is omitted, it's detected from the headers.
  * - Rows with zero amounts or unparseable values are reported in `errors` and skipped.
@@ -256,6 +273,10 @@ export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvPars
 
   const seen = new Map<string, number>();
   const skippedIdx = new Set<number>();
+  // Only a mapping with a category column is a QuickBooks-style report; plain bank CSVs never have sections.
+  // Headings are authoritative; "Total for" names are the fallback for a file whose headings were cut off.
+  const headings = new Map<string, { name: string; line: number }>();
+  const totals = new Map<string, { name: string; line: number }>();
   parsed.data.forEach((record, idx) => {
     const line = start + idx + 2; // +1 for header, +1 for 1-based
     const rawDate = record[effective.dateColumn] ?? "";
@@ -263,6 +284,12 @@ export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvPars
     if (isReportLine(record, effective, date !== null)) {
       skippedIdx.add(idx);
       result.skippedLines++;
+      const section = effective.categoryColumn ? sectionName(record) : null;
+      if (section) {
+        const bucket = section.fromTotal ? totals : headings;
+        const key = section.name.toLowerCase().replace(/\s+/g, " ");
+        if (!bucket.has(key)) bucket.set(key, { name: section.name, line });
+      }
       return;
     }
     if (!date) {
@@ -303,6 +330,14 @@ export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvPars
     // was already counted as skipped.
     if (e.type === "FieldMismatch" && skippedIdx.has(e.row ?? -1)) continue;
     result.errors.push({ line: (e.row ?? 0) + start + 2, message: e.message });
+  }
+  const found = [...(headings.size ? headings : totals).values()];
+  if (found.length > 1) {
+    result.rows = [];
+    result.errors.unshift({
+      line: found[1].line,
+      message: `This QuickBooks report covers more than one account (${found.map((f) => f.name).join(", ")}), so the same money would be counted twice. Run Transaction Detail by Account again for the BMO account only, then import that file.`,
+    });
   }
   return result;
 }
