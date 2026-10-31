@@ -54,6 +54,25 @@ After the first deploy: sign in, set chairs and the BMO opening balance in Setti
 
 ## Scripts
 
+### Rebuild disposable test books
+
+The committed `fixtures/bmo-fake-12mo-{single,split}.csv` files each contain 439 fake transactions;
+their `.truth.json` companions contain the roster, opening balance and expected answers.
+`fixtures/simplefin-demo.json` is a saved fake bank-feed response. None requires live bank access.
+
+After `db:migrate` and creating a test login, restore the default fixture with:
+
+```bash
+DATABASE_URL=pglite:./.pglite npm run fake:restore
+# Explicit opt-in for the disposable Neon dev database only:
+DATABASE_URL="$(neon connection-string dev --database-name quitbooks --role-name quitbooks_owner)" npm run fake:restore -- --yes
+```
+
+Restore uses the real CSV parser, duplicate detection and import writer. Running it twice does not
+duplicate transactions. It refuses books with bank-feed history and never wipes existing data.
+To clear bookkeeping data first, use `npm run db:wipe -- --yes` against your **local/dev** database,
+then run `fake:restore` again. Users and passwords survive the wipe. Never run either against production.
+
 | Script | What it does |
 | --- | --- |
 | `npm run dev` / `build` / `start` | Next.js |
@@ -76,7 +95,9 @@ After the first deploy: sign in, set chairs and the BMO opening balance in Setti
 - **Categories** are income, expense, or transfer. Transfers (owner draws, contributions) are excluded from P&L but count toward the bank balance.
 - **Import** parses the CSV (`src/lib/csv.ts`), detects columns, previews, then inserts. Each row gets a fingerprint so re-importing overlapping exports never double-counts.
 - **Auto-categorizing** (`src/lib/categorize.ts`): money in whose description contains a stylist's match text becomes Booth Rent for that stylist; otherwise the first matching rule wins; otherwise it lands in the Inbox.
+- **Splits** (`src/lib/splits.ts`, `src/lib/ledger.ts`): one bank row can be split into 2+ lines, each with its own category, stylist (required for Booth Rent), amount and memo, e.g. one Zelle covering two stylists' rent, or a Square deposit net of fees (+$103 sales, −$3 fees on +$100). The lines must add up exactly to the row, so the bank balance never changes. A split row has no category of its own (`transactions.is_split`; lines in `transaction_splits`) and is never in the Inbox, rules or AI suggestions. Everything that groups by category (dashboard, P&L, CSV exports) expands split rows into their lines with one function, `expandLedgerLines`.
 - **Metrics** (`src/lib/metrics.ts`) are pure functions shared by the dashboard, reports and tests.
+- **Reports are cash basis**: the app records cash in and out of the bank, so the P&L and both CSV exports are labelled "Cash basis" (compare against QuickBooks run on cash basis).
 - **Auth** is two hand-made accounts (scrypt-hashed passwords, signed session cookie). `src/proxy.ts` guards pages; every server action and route handler re-checks.
 
 ## License

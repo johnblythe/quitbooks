@@ -1,9 +1,11 @@
 import "server-only";
-import { and, count, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
-import { getDb, schema } from "@/db";
+import { and, count, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
+import { getDb, schema, type Db } from "@/db";
 import { addStylistTerm, matchRule, norm } from "./categorize";
-import { getBoothRentCategoryId, getCategorizer } from "./data";
+import { makeCategorizer } from "./categorizer";
+import { getBoothRentCategoryId } from "./data";
 import { chunk } from "./inbox";
+import { inInbox } from "./inbox-where";
 
 /**
  * Server-only rule helpers shared by the Inbox and Settings actions. These live outside the
@@ -15,10 +17,13 @@ const { transactions, rules, stylists } = schema;
 /** `inArray` lists stay at or below this many ids per query. */
 export const IN_ARRAY_CHUNK = 1000;
 
-/** Re-runs stylist matching and rules over everything still uncategorized. Returns how many were sorted. */
-export async function applyRules(): Promise<number> {
-  const db = await getDb();
-  const categorizer = await getCategorizer();
+/**
+ * Re-runs stylist matching and rules over everything still in the Inbox (split rows are never
+ * touched). Returns how many were sorted. `db` is injectable for tests.
+ */
+export async function applyRules(db?: Db): Promise<number> {
+  db ??= await getDb();
+  const categorizer = await makeCategorizer(db);
   const open = await db
     .select({
       id: transactions.id,
@@ -27,7 +32,7 @@ export async function applyRules(): Promise<number> {
       description: transactions.description,
     })
     .from(transactions)
-    .where(isNull(transactions.categoryId));
+    .where(inInbox());
 
   // Group updates by (category, stylist) so it's a handful of queries, not one per row.
   const groups = new Map<string, { categoryId: string; stylistId: string | null; ids: string[] }>();
@@ -45,7 +50,7 @@ export async function applyRules(): Promise<number> {
       await db
         .update(transactions)
         .set({ categoryId: g.categoryId, stylistId: g.stylistId, updatedAt: new Date() })
-        .where(and(inArray(transactions.id, ids), isNull(transactions.categoryId)));
+        .where(and(inArray(transactions.id, ids), inInbox()));
     }
     total += g.ids.length;
   }
@@ -96,10 +101,14 @@ export type RuleTestResult = {
  * Counts what a rule would match, with the same semantics as `matchRule`: both sides uppercased
  * with whitespace collapsed, plain substring (position, not LIKE, so no wildcard escaping).
  */
-export async function testRuleMatches(rawPattern: string, direction: "any" | "in" | "out"): Promise<RuleTestResult> {
+export async function testRuleMatches(
+  rawPattern: string,
+  direction: "any" | "in" | "out",
+  db?: Db,
+): Promise<RuleTestResult> {
   const pattern = norm(rawPattern);
   if (pattern.length < 3) return { matches: 0, inbox: 0, samples: [] };
-  const db = await getDb();
+  db ??= await getDb();
   const normalized = sql`btrim(upper(regexp_replace(${transactions.description}, '\\s+', ' ', 'g')))`;
   const where = and(
     sql`position(${pattern} in ${normalized}) > 0`,
@@ -108,7 +117,7 @@ export async function testRuleMatches(rawPattern: string, direction: "any" | "in
   const [totals] = await db
     .select({
       matches: count(),
-      inbox: sql<number>`count(*) filter (where ${transactions.categoryId} is null)::int`,
+      inbox: sql<number>`count(*) filter (where ${inInbox()})::int`,
     })
     .from(transactions)
     .where(where);

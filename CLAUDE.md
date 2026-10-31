@@ -55,7 +55,9 @@ Done:
 - Fake data: `fake:bmo` / `fake:load` / `fake:score` / `db:wipe`, plus 12-month fixtures in `fixtures/`.
 - Bank sync (SimpleFIN Bridge): one-time link in Settings, daily Vercel Cron plus "Sync now", dedupe by bank transaction id, manual-entry linking, dashboard reconciliation line, connection-attention banner, CSV cutover guard, Access URL encrypted with AES-256-GCM.
 - AI category suggestions (Claude Haiku 5.5): lazy per group via `POST /api/inbox/suggest`, pre-fill the picker and are never auto-applied, precomputed after bank sync.
-- 339 unit tests. A browser click-through on the preview (against `dev`) passed for import, linking, Inbox, rules, headers and AI suggestions. **Not yet checked at 390 px wide** beyond John's eyeball ("good enough"): Chrome on macOS won't resize below 500 px, so use a phone or DevTools device mode.
+- Split transactions: 2+ lines (category, stylist for Booth Rent, amount, memo) that sum exactly to the row; editor at `/transactions/[id]/split` (also linked from Inbox one-offs); `transactions.is_split` + `transaction_splits` (migration 0004). Every category aggregation goes through `expandLedgerLines` (`src/lib/ledger.ts`); "in the Inbox" is `inInbox()` (`src/lib/inbox-where.ts`: no category AND not split), never bare `isNull(category_id)`.
+- Reports labelled "Cash basis" (P&L page, print view, both CSVs).
+- 389 unit tests. A browser click-through on the preview (against `dev`) passed for import, linking, Inbox, rules, headers and AI suggestions. The split editor has not been click-tested in a browser yet. **Not yet checked at 390 px wide** beyond John's eyeball ("good enough"): Chrome on macOS won't resize below 500 px, so use a phone or DevTools device mode.
 
 Review findings (P0/P1/P2 with file:line): `docs/reviews/2026-10-24-logic.md`, `docs/reviews/2026-10-24-security.md`.
 
@@ -71,7 +73,6 @@ Next up, in order:
    - one guided Inbox session with Lauren.
 3. **Everything else**:
    - undo an import (by `import_batch_id`);
-   - split a transaction;
    - password change screen;
    - QuickBooks history (CSV export through the importer, for dates before the feed starts);
    - PWA polish;

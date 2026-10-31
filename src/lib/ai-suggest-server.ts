@@ -18,6 +18,7 @@ import {
   type SuggestGroup,
 } from "./ai-suggest";
 import { INBOX_LIMIT, chunk, groupInbox } from "./inbox";
+import { inInbox } from "./inbox-where";
 
 const { transactions, categories } = schema;
 
@@ -125,7 +126,7 @@ export async function suggestForGroups(opts: {
             suggestedAt: transactions.suggestedAt,
           })
           .from(transactions)
-          .where(and(inArray(transactions.id, ids), isNull(transactions.categoryId)))),
+          .where(and(inArray(transactions.id, ids), inInbox()))),
       );
     }
     const byId = new Map(rows.map((r) => [r.id, r]));
@@ -214,7 +215,7 @@ export async function suggestForGroups(opts: {
             const written = await tx
               .update(transactions)
               .set({ suggestedCategoryId: categoryId, suggestedAt: now })
-              .where(and(inArray(transactions.id, ids), isNull(transactions.categoryId), isNull(transactions.suggestedAt)))
+              .where(and(inArray(transactions.id, ids), inInbox(), isNull(transactions.suggestedAt)))
               .returning({ id: transactions.id });
             for (const w of written) {
               const r = byId.get(w.id);
@@ -268,7 +269,7 @@ export async function suggestCategories(opts: { db: Db; client?: SuggestClient }
         description: transactions.description,
       })
       .from(transactions)
-      .where(and(isNull(transactions.categoryId), isNull(transactions.suggestedAt)))
+      .where(and(inInbox(), isNull(transactions.suggestedAt)))
       .orderBy(desc(transactions.date), transactions.id)
       .limit(SUGGEST_ROW_LIMIT);
     if (!rows.length) return result;

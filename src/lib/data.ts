@@ -1,6 +1,6 @@
 import "server-only";
 import { connection } from "next/server";
-import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { getDb as openDb, schema } from "@/db";
 import { BOOTH_RENT_KEY, SETTING_KEYS, type OpeningBalance } from "@/db/defaults";
 import type { CsvMapping } from "./csv";
@@ -9,6 +9,9 @@ import { defaultCutover } from "./bank-status";
 import { monthEnd, monthStart, todayIso, type IsoDate, type MonthKey } from "./dates";
 import { INBOX_LIMIT } from "./inbox";
 import type { MetricTx } from "./metrics";
+import { inInbox } from "./inbox-where";
+import { expandLedgerLines } from "./ledger";
+import { metricTxsInRange, splitLinesFor, splitLinesInRange } from "./split-server";
 import { bankAttention, type BankAttention } from "./bank-status";
 import { verifySession } from "./auth";
 
@@ -95,6 +98,7 @@ const txSelect = {
   externalId: transactions.externalId,
   categoryId: transactions.categoryId,
   stylistId: transactions.stylistId,
+  isSplit: transactions.isSplit,
   suggestedCategoryId: transactions.suggestedCategoryId,
   suggestedAt: transactions.suggestedAt,
   categoryName: categories.name,
@@ -102,18 +106,27 @@ const txSelect = {
   stylistName: stylists.name,
 };
 
-export type TxRow = Awaited<ReturnType<typeof getTransactionsForMonth>>[number];
+export type TxRow = Awaited<ReturnType<typeof getUncategorized>>[number];
 
+/** A month's transactions (with each split's line count) plus their ledger lines, for totals. */
 export async function getTransactionsForMonth(month: MonthKey) {
   await connection();
   const db = await getDb();
-  return db
-    .select(txSelect)
-    .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .leftJoin(stylists, eq(transactions.stylistId, stylists.id))
-    .where(and(gte(transactions.date, monthStart(month)), lte(transactions.date, monthEnd(month))))
-    .orderBy(desc(transactions.date), desc(transactions.createdAt));
+  const [from, to] = [monthStart(month), monthEnd(month)];
+  const [rows, splits] = await Promise.all([
+    db
+      .select(txSelect)
+      .from(transactions)
+      .leftJoin(categories, eq(transactions.categoryId, categories.id))
+      .leftJoin(stylists, eq(transactions.stylistId, stylists.id))
+      .where(and(gte(transactions.date, from), lte(transactions.date, to)))
+      .orderBy(desc(transactions.date), desc(transactions.createdAt)),
+    splitLinesInRange(db, from, to),
+  ]);
+  const lines = expandLedgerLines(rows, splits);
+  const counts = new Map<string, number>();
+  for (const l of lines) if (l.split) counts.set(l.tx.id, l.count);
+  return { rows: rows.map((r) => ({ ...r, splitCount: counts.get(r.id) ?? 0 })), lines };
 }
 
 export async function getUncategorized(limit = 100) {
@@ -124,7 +137,7 @@ export async function getUncategorized(limit = 100) {
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .leftJoin(stylists, eq(transactions.stylistId, stylists.id))
-    .where(isNull(transactions.categoryId))
+    .where(inInbox())
     .orderBy(desc(transactions.date))
     .limit(limit);
 }
@@ -144,7 +157,7 @@ export async function countUncategorized(): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(transactions)
-    .where(isNull(transactions.categoryId));
+    .where(inInbox());
   return row?.n ?? 0;
 }
 
@@ -160,33 +173,37 @@ export async function getTransaction(id: string) {
   return row ?? null;
 }
 
-/** Lightweight rows for metrics/reports over a date range (inclusive). */
-export async function getMetricTxs(from?: IsoDate, to?: IsoDate): Promise<MetricTx[]> {
+/** A transaction's split lines in order (empty if it isn't split). */
+export async function getSplitLines(transactionId: string) {
   await connection();
-  const db = await getDb();
-  const conds = [from ? gte(transactions.date, from) : undefined, to ? lte(transactions.date, to) : undefined];
-  return db
-    .select({
-      date: transactions.date,
-      amountCents: transactions.amountCents,
-      categoryId: transactions.categoryId,
-      stylistId: transactions.stylistId,
-    })
-    .from(transactions)
-    .where(and(...conds));
+  return splitLinesFor(await getDb(), transactionId);
 }
 
-/** Detailed rows for the P&L CSV export. */
-export async function getTransactionsInRange(from: IsoDate, to: IsoDate) {
+/**
+ * Lightweight rows for metrics/reports over a date range (inclusive). Split parents come back as
+ * one row per split line (parent's date, line's amount/category/stylist), so every metric that
+ * groups by category sees the lines. Amounts still sum to the bank, so the balance is unchanged.
+ */
+export async function getMetricTxs(from?: IsoDate, to?: IsoDate): Promise<MetricTx[]> {
+  await connection();
+  return metricTxsInRange(await getDb(), from, to);
+}
+
+/** Ledger lines for the detailed P&L CSV: one per unsplit transaction, one per split line. */
+export async function getLedgerLinesInRange(from: IsoDate, to: IsoDate) {
   await connection();
   const db = await getDb();
-  return db
-    .select(txSelect)
-    .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .leftJoin(stylists, eq(transactions.stylistId, stylists.id))
-    .where(and(gte(transactions.date, from), lte(transactions.date, to)))
-    .orderBy(asc(transactions.date));
+  const [rows, splits] = await Promise.all([
+    db
+      .select(txSelect)
+      .from(transactions)
+      .leftJoin(categories, eq(transactions.categoryId, categories.id))
+      .leftJoin(stylists, eq(transactions.stylistId, stylists.id))
+      .where(and(gte(transactions.date, from), lte(transactions.date, to)))
+      .orderBy(asc(transactions.date), asc(transactions.createdAt)),
+    splitLinesInRange(db, from, to),
+  ]);
+  return expandLedgerLines(rows, splits);
 }
 
 export async function getSavedMapping(): Promise<CsvMapping | null> {

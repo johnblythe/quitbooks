@@ -9,7 +9,9 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * Money is always stored as integer cents.
@@ -150,6 +152,11 @@ export const transactions = pgTable(
     description: text("description").notNull(),
     categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
     stylistId: uuid("stylist_id").references(() => stylists.id, { onDelete: "set null" }),
+    /**
+     * Split into lines in `transaction_splits`. A split parent has no category or stylist of its own
+     * (the CHECK below), and is NOT in the Inbox: "uncategorized" means category null AND not split.
+     */
+    isSplit: boolean("is_split").notNull().default(false),
     note: text("note"),
     source: text("source", { enum: ["manual", "csv", "bank_sync"] }).notNull(),
     importBatchId: uuid("import_batch_id").references(() => importBatches.id, {
@@ -173,6 +180,36 @@ export const transactions = pgTable(
     index("transactions_stylist_idx").on(t.stylistId),
     uniqueIndex("transactions_dedupe_hash_idx").on(t.dedupeHash),
     uniqueIndex("transactions_bank_ext_idx").on(t.bankAccountId, t.externalId),
+    check("transactions_split_parent_uncategorized", sql`NOT ${t.isSplit} OR (${t.categoryId} IS NULL AND ${t.stylistId} IS NULL)`),
+  ],
+);
+
+/**
+ * The lines of a split transaction. Lines sum exactly to the parent's amount (enforced in
+ * `src/lib/splits.ts` and checked server-side on save), so the bank balance never changes.
+ * Every consumer that groups by category expands parents into these lines (`src/lib/ledger.ts`).
+ */
+export const transactionSplits = pgTable(
+  "transaction_splits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    /** Display order. Lines are written in one statement, so created_at can't order them. */
+    position: integer("position").notNull(),
+    /** Categories are archived, never deleted, so a line always has one. */
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id),
+    stylistId: uuid("stylist_id").references(() => stylists.id, { onDelete: "set null" }),
+    amountCents: integer("amount_cents").notNull(),
+    memo: text("memo"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("transaction_splits_transaction_idx").on(t.transactionId),
+    check("transaction_splits_amount_nonzero", sql`${t.amountCents} <> 0`),
   ],
 );
 
@@ -209,6 +246,7 @@ export type Category = typeof categories.$inferSelect;
 export type Stylist = typeof stylists.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+export type TransactionSplit = typeof transactionSplits.$inferSelect;
 export type Rule = typeof rules.$inferSelect;
 export type ImportBatch = typeof importBatches.$inferSelect;
 export type BankConnection = typeof bankConnections.$inferSelect;

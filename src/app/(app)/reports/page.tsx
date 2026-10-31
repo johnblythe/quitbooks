@@ -5,6 +5,7 @@ import { Card, Empty, Money, PageHeader, Skeleton, buttonClass, cx, inputClass }
 import { getCategories, getMetricTxs, requestToday } from "@/lib/data";
 import { formatDate } from "@/lib/dates";
 import { computePnl, type PnlLine } from "@/lib/metrics";
+import { BUSINESS_NAME, CASH_BASIS } from "@/lib/report-csv";
 import { rangePresets, resolveRange } from "@/lib/report-range";
 import { PrintButton } from "./print-button";
 
@@ -15,7 +16,7 @@ type Params = { from?: string; to?: string; range?: string };
 export default function ReportsPage({ searchParams }: { searchParams: Promise<Params> }) {
   return (
     <>
-      <PageHeader title="Profit & loss" subtitle="Tax-ready summary for any date range." />
+      <PageHeader title="Profit & loss" subtitle={`${CASH_BASIS} · Tax-ready summary for any date range.`} />
       <Suspense fallback={<Skeleton rows={3} />}>
         <Report searchParams={searchParams} />
       </Suspense>
@@ -62,10 +63,11 @@ async function Report({ searchParams }: { searchParams: Promise<Params> }) {
       </form>
 
       <Card>
-        <p className="text-xs uppercase tracking-wide text-ink-2">L Marie Studio LLC</p>
+        <p className="text-xs uppercase tracking-wide text-ink-2">{BUSINESS_NAME}</p>
         <p className="mt-1 font-serif text-lg">
           {formatDate(from)} – {formatDate(to)}
         </p>
+        <p className="text-sm text-ink-2">Profit &amp; loss · {CASH_BASIS}</p>
 
         {pnl.income.length + pnl.expenses.length === 0 ? (
           <div className="mt-4">

@@ -1,5 +1,5 @@
 /**
- * Deletes transactions, import batches, rules, CSV mappings and stylists, and makes the bank feed's
+ * Deletes transactions (and split lines), import batches, rules, CSV mappings and stylists, and makes the bank feed's
  * next sync re-fetch from its start date (so wiped feed rows come back). Keeps users, categories,
  * settings and the bank link. Requires --yes on any database.
  * Usage: npm run db:wipe -- --yes
@@ -14,8 +14,9 @@ async function main() {
     process.exit(1);
   }
   const { db, close } = await scriptDb();
-  // Order matters: transactions reference batches and stylists.
+  // Order matters: split lines reference transactions; transactions reference batches and stylists.
   const targets = [
+    ["split lines", schema.transactionSplits],
     ["transactions", schema.transactions],
     ["import batches", schema.importBatches],
     ["rules", schema.rules],

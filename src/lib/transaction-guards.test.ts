@@ -73,4 +73,21 @@ describe("feed-linked rows", () => {
     expect(await row(tx.id)).toMatchObject({ amountCents: -999, date: "2026-10-03" });
     expect(await updateTransactionRow(db, missingId, edit)).toBe("missing");
   });
+
+  it("split parents keep their amount and cannot acquire their own category", async () => {
+    const tx = await add("manual");
+    await db.update(transactions).set({ isSplit: true }).where(eq(transactions.id, tx.id));
+    expect(await updateTransactionRow(db, tx.id, { ...edit, amountCents: -999 })).toBe("split_locked");
+    const [cat] = await db.insert(schema.categories).values({ name: "Test", kind: "expense" }).returning();
+    expect(await updateTransactionRow(db, tx.id, { ...edit, date: "2026-10-03", categoryId: cat.id })).toBe("ok");
+    expect(await row(tx.id)).toMatchObject({ isSplit: true, categoryId: null, stylistId: null, amountCents: -100, date: "2026-10-03" });
+  });
+
+  it("split feed-linked parents still keep their bank date and cannot be deleted", async () => {
+    const tx = await add("bank_sync");
+    await db.update(transactions).set({ isSplit: true }).where(eq(transactions.id, tx.id));
+    expect(await updateTransactionRow(db, tx.id, { ...edit, date: "2026-10-02" })).toBe("feed_linked");
+    expect(await updateTransactionRow(db, tx.id, edit)).toBe("ok");
+    expect(await deleteTransactionRow(db, tx.id)).toBe("feed_linked");
+  });
 });

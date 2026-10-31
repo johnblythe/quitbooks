@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -10,8 +10,9 @@ import { getCategorizer } from "@/lib/data";
 import { isIsoDate, monthOf } from "@/lib/dates";
 import { chunk } from "@/lib/inbox";
 import { parseAmountToCents } from "@/lib/money";
+import { inInbox } from "@/lib/inbox-where";
 import { IN_ARRAY_CHUNK, applyRules, rememberPattern } from "@/lib/rules-server";
-import { FEED_EDIT_ERROR, deleteTransactionRow, updateTransactionRow } from "@/lib/transaction-guards";
+import { FEED_EDIT_ERROR, SPLIT_EDIT_ERROR, deleteTransactionRow, updateTransactionRow } from "@/lib/transaction-guards";
 
 const { transactions } = schema;
 
@@ -86,6 +87,7 @@ export async function updateTransaction(_prev: TxFormState, formData: FormData):
   // A feed-linked row keeps its bank amount and date (see transaction-guards.ts).
   const outcome = await updateTransactionRow(await getDb(), id.data, { date, amountCents, description, note, categoryId, stylistId });
   if (outcome === "feed_linked") return { error: FEED_EDIT_ERROR };
+  if (outcome === "split_locked") return { error: SPLIT_EDIT_ERROR };
   if (outcome === "missing") return { error: "That transaction was deleted." };
   redirect(`/transactions?month=${monthOf(date)}`);
 }
@@ -117,10 +119,11 @@ export async function categorizeTransaction(formData: FormData) {
   const { id, categoryId, stylistId, remember, pattern, direction } = input.data;
 
   const db = await getDb();
+  // Never on a split row: its lines carry the categories.
   await db
     .update(transactions)
     .set({ categoryId, stylistId, updatedAt: new Date() })
-    .where(eq(transactions.id, id));
+    .where(and(eq(transactions.id, id), eq(transactions.isSplit, false)));
 
   if (remember && pattern && pattern.length >= 3) {
     const [tx] = await db
@@ -168,7 +171,7 @@ export async function categorizeGroup(formData: FormData) {
     await db
       .update(transactions)
       .set({ categoryId, stylistId, updatedAt: new Date() })
-      .where(and(inArray(transactions.id, part), isNull(transactions.categoryId)));
+      .where(and(inArray(transactions.id, part), inInbox()));
   }
 
   if (remember && pattern && pattern.length >= 3) {
