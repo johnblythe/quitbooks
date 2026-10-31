@@ -5,6 +5,7 @@ import type { TxFormState } from "@/app/actions/transactions";
 import { Button, ErrorText, Field, cx, inputClass } from "./ui";
 
 type Option = { id: string; name: string };
+const lockedClass = "disabled:bg-surface-2 disabled:text-ink-2";
 type CategoryOption = Option & { kind: "income" | "expense" | "transfer" };
 
 export type TxFormDefaults = {
@@ -23,15 +24,24 @@ export function TransactionForm({
   categories,
   stylists,
   submitLabel,
+  split = false,
+  lockedNote,
 }: {
   action: (prev: TxFormState, formData: FormData) => Promise<TxFormState>;
   defaults: TxFormDefaults;
   categories: CategoryOption[];
   stylists: Option[];
   submitLabel: string;
+  /** A split row: its lines own the categories, and its amount is locked so they keep adding up. */
+  split?: boolean;
+  /** Set for feed-linked rows: direction, amount and date are shown disabled, with this reason. */
+  lockedNote?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
   const [direction, setDirection] = useState<"in" | "out">((defaults.amountCents ?? -1) > 0 ? "in" : "out");
+
+  const locked = !!lockedNote;
+  const amountText = defaults.amountCents ? (Math.abs(defaults.amountCents) / 100).toFixed(2) : "";
 
   const groups: { label: string; kind: CategoryOption["kind"] }[] = [
     { label: "Money in", kind: "income" },
@@ -51,6 +61,7 @@ export function TransactionForm({
             type="button"
             role="radio"
             aria-checked={direction === d}
+            disabled={locked || split}
             onClick={() => setDirection(d)}
             className={cx(
               "rounded-lg py-2 text-sm font-medium",
@@ -63,43 +74,54 @@ export function TransactionForm({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Amount">
+        <Field label="Amount" hint={split ? "Locked while split. Remove the split to change it." : undefined}>
           <input
-            name="amount"
+            name={locked || split ? undefined : "amount"}
             inputMode="decimal"
             placeholder="0.00"
             required
-            defaultValue={defaults.amountCents ? (Math.abs(defaults.amountCents) / 100).toFixed(2) : ""}
-            className={inputClass}
+            disabled={locked || split}
+            defaultValue={amountText}
+            className={cx(inputClass, lockedClass)}
           />
         </Field>
         <Field label="Date">
-          <input name="date" type="date" required defaultValue={defaults.date} className={inputClass} />
+          <input name={locked ? undefined : "date"} type="date" required disabled={locked} defaultValue={defaults.date} className={cx(inputClass, lockedClass)} />
         </Field>
       </div>
+      {locked || split ? <input type="hidden" name="amount" value={amountText} /> : null}
+      {locked ? (
+        <>
+          {/* Disabled fields aren't submitted; the server checks these match the bank's values. */}
+          <input type="hidden" name="date" value={defaults.date} />
+          <p className="-mt-2 text-xs text-ink-2">{lockedNote}</p>
+        </>
+      ) : null}
 
       <Field label="Description">
         <input name="description" required maxLength={300} defaultValue={defaults.description} className={inputClass} placeholder="e.g. Sally Beauty supplies" />
       </Field>
 
-      <Field label="Category" hint={defaults.id ? undefined : "Leave blank and saved rules will try to sort it."}>
-        <select name="categoryId" defaultValue={defaults.categoryId ?? ""} className={inputClass}>
-          <option value="">Uncategorized</option>
-          {groups.map((g) => (
-            <optgroup key={g.kind} label={g.label}>
-              {categories
-                .filter((c) => c.kind === g.kind)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
-        </select>
-      </Field>
+      {split ? null : (
+        <Field label="Category" hint={defaults.id ? undefined : "Leave blank and saved rules will try to sort it."}>
+          <select name="categoryId" defaultValue={defaults.categoryId ?? ""} className={inputClass}>
+            <option value="">Uncategorized</option>
+            {groups.map((g) => (
+              <optgroup key={g.kind} label={g.label}>
+                {categories
+                  .filter((c) => c.kind === g.kind)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+        </Field>
+      )}
 
-      {stylists.length ? (
+      {stylists.length && !split ? (
         <Field label="Stylist" hint="For booth rent payments.">
           <select name="stylistId" defaultValue={defaults.stylistId ?? ""} className={inputClass}>
             <option value="">None</option>

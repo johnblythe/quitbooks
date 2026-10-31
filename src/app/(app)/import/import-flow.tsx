@@ -108,9 +108,13 @@ export function ImportFlow() {
     startTransition(async () => {
       try {
         const sent = Object.fromEntries(groups.map((g) => [g.key, choices[g.key] ?? g.choice]));
-        setResult(await commitImport(file.text, mapping, file.name, links, ackErrors, sent));
-        setPreview(null);
-        setFile(null);
+        const outcome = await commitImport(file.text, mapping, file.name, links, ackErrors, sent);
+        setResult(outcome);
+        // Keep the file and choices on a rejected commit so the user can correct them and retry.
+        if (outcome.ok) {
+          setPreview(null);
+          setFile(null);
+        }
       } catch {
         setError("The import didn't finish and nothing was saved. It's safe to try again.");
       }

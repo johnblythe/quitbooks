@@ -9,7 +9,9 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * Money is always stored as integer cents.
@@ -86,8 +88,15 @@ export const bankConnections = pgTable("bank_connections", {
   /** Feed rows dated before this are ignored; CSV rows on/after it are skipped. */
   cutoverDate: date("cutover_date").notNull(),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  /**
+   * The next sync fetches from cutoverDate instead of lastSyncedAt - 7 days. Set when the start date
+   * moves earlier, an account is added, or the books are wiped; cleared by a good sync.
+   */
+  fullSyncPending: boolean("full_sync_pending").notNull().default(false),
   lastError: text("last_error"),
   lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  /** SimpleFIN errors about other connections on the Bridge, from the last sync. Shown, but the sync still counts. */
+  lastWarning: text("last_warning"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -95,10 +104,18 @@ export const bankAccounts = pgTable(
   "bank_accounts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    connectionId: uuid("connection_id")
-      .notNull()
-      .references(() => bankConnections.id, { onDelete: "cascade" }),
+    /**
+     * Null after a disconnect: the row is kept so feed transactions stay tied to it, and connecting
+     * the same SimpleFIN account again re-attaches it (by externalId) instead of importing twice.
+     */
+    connectionId: uuid("connection_id").references(() => bankConnections.id, { onDelete: "set null" }),
+    /** SimpleFIN's account id. One row per SimpleFIN account, whichever connection it's under. */
     externalId: text("external_id").notNull(),
+    /**
+     * SimpleFIN's id for the bank login this account is under (`conn_id`), so an error about that
+     * login is recognized as ours even when SimpleFIN leaves the account out of the response.
+     */
+    connId: text("conn_id"),
     name: text("name").notNull(),
     orgName: text("org_name").notNull().default(""),
     currency: text("currency").notNull().default("USD"),
@@ -109,10 +126,10 @@ export const bankAccounts = pgTable(
     include: boolean("include").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("bank_accounts_conn_ext_idx").on(t.connectionId, t.externalId)],
+  (t) => [uniqueIndex("bank_accounts_ext_idx").on(t.externalId)],
 );
 
-/** One row per sync attempt, for debugging the feed. */
+/** One row per sync attempt (or account-list fetch), for debugging the feed and counting requests. */
 export const bankSyncRuns = pgTable("bank_sync_runs", {
   id: uuid("id").primaryKey().defaultRandom(),
   connectionId: uuid("connection_id").references(() => bankConnections.id, { onDelete: "cascade" }),
@@ -122,6 +139,8 @@ export const bankSyncRuns = pgTable("bank_sync_runs", {
   linked: integer("linked").notNull().default(0),
   skipped: integer("skipped").notNull().default(0),
   error: text("error"),
+  /** SimpleFIN requests this run made (or has reserved, while running). Feeds the daily request budget. */
+  requests: integer("requests").notNull().default(0),
 });
 
 export const transactions = pgTable(
@@ -133,6 +152,11 @@ export const transactions = pgTable(
     description: text("description").notNull(),
     categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
     stylistId: uuid("stylist_id").references(() => stylists.id, { onDelete: "set null" }),
+    /**
+     * Split into lines in `transaction_splits`. A split parent has no category or stylist of its own
+     * (the CHECK below), and is NOT in the Inbox: "uncategorized" means category null AND not split.
+     */
+    isSplit: boolean("is_split").notNull().default(false),
     note: text("note"),
     source: text("source", { enum: ["manual", "csv", "bank_sync"] }).notNull(),
     importBatchId: uuid("import_batch_id").references(() => importBatches.id, {
@@ -156,6 +180,36 @@ export const transactions = pgTable(
     index("transactions_stylist_idx").on(t.stylistId),
     uniqueIndex("transactions_dedupe_hash_idx").on(t.dedupeHash),
     uniqueIndex("transactions_bank_ext_idx").on(t.bankAccountId, t.externalId),
+    check("transactions_split_parent_uncategorized", sql`NOT ${t.isSplit} OR (${t.categoryId} IS NULL AND ${t.stylistId} IS NULL)`),
+  ],
+);
+
+/**
+ * The lines of a split transaction. Lines sum exactly to the parent's amount (enforced in
+ * `src/lib/splits.ts` and checked server-side on save), so the bank balance never changes.
+ * Every consumer that groups by category expands parents into these lines (`src/lib/ledger.ts`).
+ */
+export const transactionSplits = pgTable(
+  "transaction_splits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    transactionId: uuid("transaction_id")
+      .notNull()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    /** Display order. Lines are written in one statement, so created_at can't order them. */
+    position: integer("position").notNull(),
+    /** Categories are archived, never deleted, so a line always has one. */
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id),
+    stylistId: uuid("stylist_id").references(() => stylists.id, { onDelete: "set null" }),
+    amountCents: integer("amount_cents").notNull(),
+    memo: text("memo"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("transaction_splits_transaction_idx").on(t.transactionId),
+    check("transaction_splits_amount_nonzero", sql`${t.amountCents} <> 0`),
   ],
 );
 
@@ -192,6 +246,7 @@ export type Category = typeof categories.$inferSelect;
 export type Stylist = typeof stylists.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+export type TransactionSplit = typeof transactionSplits.$inferSelect;
 export type Rule = typeof rules.$inferSelect;
 export type ImportBatch = typeof importBatches.$inferSelect;
 export type BankConnection = typeof bankConnections.$inferSelect;

@@ -53,26 +53,26 @@ Done:
   - node-postgres with `attachDatabasePool`;
   - transactional migrations;
   - Vercel project `drippy-projects/quitbooks`.
-- Fake data: `fake:bmo` / `fake:load` / `fake:score` / `db:wipe`, plus 12-month fixtures in `fixtures/`.
+- Fake data: `fake:bmo` / `fake:load` / `fake:restore` / `fake:score` / `db:wipe`, plus committed 439-row, 12-month fixtures in `fixtures/`. `fake:restore` uses the real import writer and dedupes on repeat; the wipe-and-restore cycle is documented in README and verified locally and on Neon dev. Never use fake-data commands against production.
 - Bank sync (SimpleFIN Bridge): one-time link in Settings, daily Vercel Cron plus "Sync now", dedupe by bank transaction id, manual-entry linking, dashboard reconciliation line, connection-attention banner, CSV cutover guard, Access URL encrypted with AES-256-GCM.
 - AI category suggestions (Claude Haiku 5.5): lazy per group via `POST /api/inbox/suggest`, pre-fill the picker and are never auto-applied, precomputed after bank sync.
-- 339 unit tests. A browser click-through on the preview (against `dev`) passed for import, linking, Inbox, rules, headers and AI suggestions. **Not yet checked at 390 px wide** beyond John's eyeball ("good enough"): Chrome on macOS won't resize below 500 px, so use a phone or DevTools device mode.
+- Split transactions: 2+ lines (category, stylist for Booth Rent, amount, memo) that sum exactly to the row; editor at `/transactions/[id]/split` (also linked from Inbox one-offs); `transactions.is_split` + `transaction_splits` (migration 0006, after bank-sync 0004/0005). Every category aggregation goes through `expandLedgerLines` (`src/lib/ledger.ts`); "in the Inbox" is `inInbox()` (`src/lib/inbox-where.ts`: no category AND not split), never bare `isNull(category_id)`.
+- Reports labelled "Cash basis" (P&L page, print view, both CSVs).
+- Release verification on 2026-10-31: 542 tests; typecheck, lint and production builds pass. Five authenticated bank-sync preview pages load. Isolated local browser checks verify feed amount/date locks, no Delete, and an amber daily-budget sync result (not a real bank fetch). Split save/edit/remove and cash-basis detailed export pass at 390px without horizontal overflow.
 
 Review findings (P0/P1/P2 with file:line): `docs/reviews/2026-10-24-logic.md`, `docs/reviews/2026-10-24-security.md`.
 
-Data is not precious yet: wiping and re-importing is fine until John says otherwise, so don't contort a fix to preserve existing rows.
+Neon dev is disposable; production is real books. Ask before wiping shared test data and never reset production as part of fixture work. On 2026-10-31 John authorized repairing the legacy dev split migration; 439 fake transactions were restored and the login preserved. Both databases now have migrations 0000 through 0006. An expiring rehearsal branch `release-check-2026-10-31` expires November 2.
 
 Next up, in order:
-1. **Real BMO link (John):** the $1.50 SimpleFIN test, ideally with a view-only BMO user. Confirm which BMO login the salon uses (Digital Banking or OLBB).
-2. **Go live**:
-   - merge `bank-sync` → `main` (deploys Production);
-   - production logins via `user:add` against the `production` Neon branch;
+1. **Production logins (John):** no production users exist as of 2026-10-31. Use `user:add` against `production`, with the hidden password prompt, for John and Lauren. Do not put passwords in chat, command arguments or committed files.
+2. **Real BMO acceptance (John):** bank-sync PR #1 and splits PR #3 are merged; production deploys from `main`. Import category mapping is the next release PR. Sign up for SimpleFIN yourself, ideally with a view-only BMO user. Confirm which BMO login the salon uses (Digital Banking or OLBB).
    - link the real BMO on Production (not Preview);
    - first sync and a reconciliation check;
    - one guided Inbox session with Lauren.
+   - compare cash-basis P&L to Lauren's actual QuickBooks exports; the committed QBO sample is synthetic, not evidence of real export compatibility.
 3. **Everything else**:
    - undo an import (by `import_batch_id`);
-   - split a transaction;
    - password change screen;
    - QuickBooks bank-rules import (not done: the file format is unverified);
    - PWA polish;

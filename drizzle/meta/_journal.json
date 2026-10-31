@@ -29,6 +29,27 @@
       "when": 1792876718373,
       "tag": "0003_nebulous_jocasta",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792893139908,
+      "tag": "0004_polite_sentinel",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792894776545,
+      "tag": "0005_volatile_kitty_pryde",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793453255129,
+      "tag": "0006_transaction_splits",
+      "breakpoints": true
     }
   ]
 }

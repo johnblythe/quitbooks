@@ -193,10 +193,11 @@ const REPORT_FURNITURE = /^(total\b|(cash|accrual) basis\b)/i;
  * bad date is NOT furniture: that is a real parse error.
  */
 function isReportLine(record: Record<string, string>, mapping: CsvMapping, hasDate: boolean): boolean {
+  // A dated bank row is activity even when its payee starts with "Total" and precedes the date.
+  if (hasDate) return false;
   const cells = Object.values(record).filter((v): v is string => typeof v === "string");
   const first = cells.map((c) => c.trim()).find(Boolean) ?? "";
   if (REPORT_FURNITURE.test(first)) return true;
-  if (hasDate) return false;
   const amountCols =
     mapping.amountMode === "single" ? [mapping.amountColumn] : [mapping.debitColumn, mapping.creditColumn];
   return amountCols.every((c) => !(record[c ?? ""] ?? "").trim());

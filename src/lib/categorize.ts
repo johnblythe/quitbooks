@@ -41,14 +41,25 @@ export function norm(s: string) {
   return s.toUpperCase().replace(/\s+/g, " ").trim();
 }
 
-/** Terms used to recognize a stylist in a bank description: their match text, else their full name. */
+/** Separators between a stylist's match-text terms. */
+const TERM_SEPARATORS = /[,;\n]/g;
+
+/** Text with separators read as spaces, the way descriptions are matched ("DOE, JANE" -> "DOE JANE"). */
+function asOneTerm(s: string) {
+  return s.replace(TERM_SEPARATORS, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Terms used to recognize a stylist in a bank description: their match text, else their full name
+ * as one term (a name like "Doe, Jane" is never split into single names).
+ */
 export function stylistTerms(s: MatchableStylist): string[] {
   const terms = (s.matchText ?? "")
-    .split(/[,;\n]/)
+    .split(TERM_SEPARATORS)
     .map(norm)
     .filter((t) => t.length >= 3);
   if (terms.length) return terms;
-  const name = norm(s.name);
+  const name = norm(asOneTerm(s.name));
   return name.length >= 3 ? [name] : [];
 }
 
@@ -77,7 +88,8 @@ export function matchStylist(
   stylists: MatchableStylist[],
 ): MatchableStylist | null {
   if (tx.amountCents <= 0) return null;
-  const desc = norm(tx.description);
+  // Separators read as spaces, so a remembered "ZELLE FROM DOE JANE" matches "ZELLE FROM DOE, JANE".
+  const desc = norm(asOneTerm(tx.description));
   let best: { s: MatchableStylist; len: number } | null = null;
   for (const s of stylists) {
     if (!stylistActiveOn(s, tx.date)) continue;
@@ -86,6 +98,26 @@ export function matchStylist(
     }
   }
   return best?.s ?? null;
+}
+
+/**
+ * The stylist's match text after "remembering" `pattern` for them, or null if it's already there.
+ * Keeps the existing terms (or the full name as one term, which was the implicit term). Separators
+ * in the pattern and the name become spaces, so "ZELLE FROM DOE, JANE" or a stylist named
+ * "Doe, Jane" stays one term instead of leaving a bare "JANE" that would match any other Jane.
+ */
+export function addStylistTerm(s: Pick<MatchableStylist, "name" | "matchText">, pattern: string): string | null {
+  const split = (t: string | null) =>
+    (t ?? "")
+      .split(TERM_SEPARATORS)
+      .map((x) => x.trim())
+      .filter(Boolean);
+  const existing = split(s.matchText);
+  const name = asOneTerm(s.name);
+  const base = existing.length ? existing : name ? [name] : [];
+  const term = asOneTerm(pattern);
+  if (term.length < 3 || base.some((t) => norm(t) === norm(term))) return null;
+  return [...base, term].join(", ");
 }
 
 function time(d: Date | string | null | undefined): number {
@@ -117,25 +149,60 @@ const US_STATES = new Set(
   "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC".split(" "),
 );
 
+/** Words that introduce the other party of a transfer or P2P payment ("ZELLE PAYMENT FROM DANA FISK"). */
+const COUNTERPARTY_MARKERS = new Set(["FROM", "TO"]);
+const MAX_PATTERN_WORDS = 5;
+
+/** A word that can't be part of a pattern: digits, `#` or `*` (card numbers, refs, store ids). */
+function noisyWord(w: string) {
+  return /[\d#*]/.test(w);
+}
+
+/** A word that can be part of a pattern: not noisy, and longer than 1 char. */
+function cleanWord(w: string) {
+  return w.length > 1 && !noisyWord(w);
+}
+
 /**
- * Suggests a "remember" pattern: the longest contiguous run (by characters) of words with no
- * digits, `#` or `*`, each longer than 1 char, capped at 5 words; ties go to the later run.
- * A trailing "CITY ST" is dropped first. Always a substring of the normalized description, or "" if shorter than 3 characters.
+ * Suggests a "remember" pattern: the longest contiguous run (by characters) of clean words, capped
+ * at 5 words; ties go to the later run. A trailing "CITY ST" is dropped first.
+ * Transfers and P2P payments are different: when FROM or TO is followed by a usable word, the
+ * pattern ends with the words after the last FROM/TO (the payer or payee, up to 5 words, initials
+ * included, stopping at a noisy word) so two stylists' Zelle payments don't share a pattern
+ * ("FROM JANE M DOE", "FROM J DOE"), and no "CITY ST" is dropped from them ("TO ACME CO").
+ * Always a substring of the normalized description, or "" if shorter than 3 characters.
  */
 export function suggestPattern(description: string): string {
   let words = norm(description).split(" ");
+
+  let marker = -1;
+  for (let i = words.length - 2; i >= 0; i--) {
+    if (COUNTERPARTY_MARKERS.has(words[i])) {
+      marker = i;
+      break;
+    }
+  }
+  if (marker >= 0 && !noisyWord(words[marker + 1])) {
+    let start = marker;
+    while (start > 0 && cleanWord(words[start - 1])) start--;
+    let end = marker + 1;
+    while (end + 1 < words.length && end - marker < MAX_PATTERN_WORDS && !noisyWord(words[end + 1])) end++;
+    const cand = words.slice(Math.max(start, end - MAX_PATTERN_WORDS + 1), end + 1).join(" ");
+    if (cand.length >= 3) return cand;
+  }
+
   // Card descriptions end with "CITY ST"; that is location noise, not the merchant.
   if (words.length >= 5 && US_STATES.has(words[words.length - 1])) words = words.slice(0, -2);
   let best = "";
   let run: string[] = [];
   const flush = () => {
     if (!run.length) return;
-    const cand = run.slice(0, 5).join(" ");
+    const cand = run.slice(0, MAX_PATTERN_WORDS).join(" ");
     if (cand.length >= best.length) best = cand;
     run = [];
   };
   for (const w of words) {
-    if (w.length > 1 && !/[\d#*]/.test(w)) run.push(w);
+    if (cleanWord(w)) run.push(w);
     else flush();
   }
   flush();

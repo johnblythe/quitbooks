@@ -240,7 +240,7 @@ async function resolveCategoryChoices(
   if (entries.length > MAX_CHOICES) throw new ImportCategoryError("That import has too many categories to map.");
 
   const all = await tx.select({ id: categories.id, name: categories.name, archived: categories.archived }).from(categories);
-  const ids = new Set(all.map((c) => c.id));
+  const ids = new Set(all.filter((c) => !c.archived).map((c) => c.id));
   const byName = new Map<string, string>();
   for (const c of all) if (!c.archived && !byName.has(categoryKey(c.name))) byName.set(categoryKey(c.name), c.id);
 
@@ -253,7 +253,7 @@ async function resolveCategoryChoices(
     }
     if (choice.type === "existing") {
       if (!ids.has(choice.categoryId)) {
-        throw new ImportCategoryError("A category you picked no longer exists. Preview the file again.");
+        throw new ImportCategoryError("A category you picked is hidden or no longer exists. Preview the file again.");
       }
       resolved.set(key, choice.categoryId);
       saved[key] = choice;

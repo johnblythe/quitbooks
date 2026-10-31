@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { applyRulesToUncategorized, categorizeGroup, categorizeTransaction } from "@/app/actions/transactions";
 import { BankBanner } from "@/components/bank-banner";
@@ -191,7 +192,15 @@ function OneOffCard({ tx, stylists }: { tx: TxRow; stylists: Stylist[] }) {
           <p className="break-words text-sm font-medium">{tx.description}</p>
           <p className="mt-0.5 text-xs text-ink-2">{formatDate(tx.date)}</p>
         </div>
-        <Money cents={tx.amountCents} signed className={tx.amountCents > 0 ? "shrink-0 text-good" : "shrink-0"} />
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Money cents={tx.amountCents} signed className={tx.amountCents > 0 ? "text-good" : undefined} />
+          <Link
+            href={`/transactions/${tx.id}/split?from=inbox`}
+            className="-my-1 inline-flex min-h-8 items-center text-xs text-accent underline"
+          >
+            Split
+          </Link>
+        </div>
       </div>
       <form action={categorizeTransaction} className="mt-3 space-y-2">
         <input type="hidden" name="id" value={tx.id} />

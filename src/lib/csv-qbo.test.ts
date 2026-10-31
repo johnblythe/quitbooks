@@ -84,6 +84,13 @@ describe("parsing the QuickBooks sample", () => {
 
 describe("report furniture detection", () => {
   const header = "Date,Name,Memo/Description,Split,Amount";
+  it("never drops dated activity when a payee before the date starts with Total", () => {
+    const p = parseBankCsv("Name,Date,Amount\nTotal Beauty Supply,10/01/2026,-25.00\nCash Basis Consulting,10/02/2026,-10.00\n");
+    expect(p.rows).toHaveLength(2);
+    expect(p.rows.map((r) => r.amountCents)).toEqual([-2500, -1000]);
+    expect(p.skippedLines).toBe(0);
+    expect(p.errors).toEqual([]);
+  });
   it("skips TOTAL and Accrual Basis lines in any case, and rows with neither date nor amount", () => {
     const csv = [
       header,

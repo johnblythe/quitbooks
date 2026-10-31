@@ -1,19 +1,34 @@
 import "server-only";
 import { connection } from "next/server";
-import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
-import { getDb, schema } from "@/db";
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { getDb as openDb, schema } from "@/db";
 import { BOOTH_RENT_KEY, SETTING_KEYS, type OpeningBalance } from "@/db/defaults";
 import type { CsvMapping } from "./csv";
 import { makeCategorizer } from "./categorizer";
 import { defaultCutover } from "./bank-status";
 import { monthEnd, monthStart, todayIso, type IsoDate, type MonthKey } from "./dates";
+import { INBOX_LIMIT } from "./inbox";
 import type { MetricTx } from "./metrics";
-import { bankAttention } from "./bank-status";
+import { inInbox } from "./inbox-where";
+import { expandLedgerLines } from "./ledger";
+import { metricTxsInRange, splitLinesFor, splitLinesInRange } from "./split-server";
+import { bankAttention, type BankAttention } from "./bank-status";
+import { verifySession } from "./auth";
 
 /**
  * Data access layer. Every read awaits connection() so it runs at request time
  * (Cache Components would otherwise try to prerender it at build).
  */
+
+/**
+ * Every read below gets the database through this, so every page re-checks the session (the user
+ * exists and session_version still matches) and redirects to /login if it doesn't. The proxy only
+ * checks the cookie signature.
+ */
+async function getDb() {
+  await verifySession();
+  return openDb();
+}
 
 const { categories, stylists, transactions, rules, settings, csvMappings, importBatches, bankConnections, bankAccounts } = schema;
 
@@ -82,8 +97,10 @@ const txSelect = {
   description: transactions.description,
   note: transactions.note,
   source: transactions.source,
+  externalId: transactions.externalId,
   categoryId: transactions.categoryId,
   stylistId: transactions.stylistId,
+  isSplit: transactions.isSplit,
   suggestedCategoryId: transactions.suggestedCategoryId,
   suggestedAt: transactions.suggestedAt,
   categoryName: categories.name,
@@ -91,18 +108,27 @@ const txSelect = {
   stylistName: stylists.name,
 };
 
-export type TxRow = Awaited<ReturnType<typeof getTransactionsForMonth>>[number];
+export type TxRow = Awaited<ReturnType<typeof getUncategorized>>[number];
 
+/** A month's transactions (with each split's line count) plus their ledger lines, for totals. */
 export async function getTransactionsForMonth(month: MonthKey) {
   await connection();
   const db = await getDb();
-  return db
-    .select(txSelect)
-    .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .leftJoin(stylists, eq(transactions.stylistId, stylists.id))
-    .where(and(gte(transactions.date, monthStart(month)), lte(transactions.date, monthEnd(month))))
-    .orderBy(desc(transactions.date), desc(transactions.createdAt));
+  const [from, to] = [monthStart(month), monthEnd(month)];
+  const [rows, splits] = await Promise.all([
+    db
+      .select(txSelect)
+      .from(transactions)
+      .leftJoin(categories, eq(transactions.categoryId, categories.id))
+      .leftJoin(stylists, eq(transactions.stylistId, stylists.id))
+      .where(and(gte(transactions.date, from), lte(transactions.date, to)))
+      .orderBy(desc(transactions.date), desc(transactions.createdAt)),
+    splitLinesInRange(db, from, to),
+  ]);
+  const lines = expandLedgerLines(rows, splits);
+  const counts = new Map<string, number>();
+  for (const l of lines) if (l.split) counts.set(l.tx.id, l.count);
+  return { rows: rows.map((r) => ({ ...r, splitCount: counts.get(r.id) ?? 0 })), lines };
 }
 
 export async function getUncategorized(limit = 100) {
@@ -113,13 +139,13 @@ export async function getUncategorized(limit = 100) {
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .leftJoin(stylists, eq(transactions.stylistId, stylists.id))
-    .where(isNull(transactions.categoryId))
+    .where(inInbox())
     .orderBy(desc(transactions.date))
     .limit(limit);
 }
 
-/** Max rows the grouped Inbox loads at once. */
-export const INBOX_LIMIT = 2000;
+/** Max rows the grouped Inbox loads at once (defined in inbox.ts so the suggest route can share it). */
+export { INBOX_LIMIT };
 
 /** Every uncategorized row for the grouped Inbox (capped), plus the true total. */
 export async function getInboxRows(limit = INBOX_LIMIT) {
@@ -133,7 +159,7 @@ export async function countUncategorized(): Promise<number> {
   const [row] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(transactions)
-    .where(isNull(transactions.categoryId));
+    .where(inInbox());
   return row?.n ?? 0;
 }
 
@@ -149,33 +175,37 @@ export async function getTransaction(id: string) {
   return row ?? null;
 }
 
-/** Lightweight rows for metrics/reports over a date range (inclusive). */
-export async function getMetricTxs(from?: IsoDate, to?: IsoDate): Promise<MetricTx[]> {
+/** A transaction's split lines in order (empty if it isn't split). */
+export async function getSplitLines(transactionId: string) {
   await connection();
-  const db = await getDb();
-  const conds = [from ? gte(transactions.date, from) : undefined, to ? lte(transactions.date, to) : undefined];
-  return db
-    .select({
-      date: transactions.date,
-      amountCents: transactions.amountCents,
-      categoryId: transactions.categoryId,
-      stylistId: transactions.stylistId,
-    })
-    .from(transactions)
-    .where(and(...conds));
+  return splitLinesFor(await getDb(), transactionId);
 }
 
-/** Detailed rows for the P&L CSV export. */
-export async function getTransactionsInRange(from: IsoDate, to: IsoDate) {
+/**
+ * Lightweight rows for metrics/reports over a date range (inclusive). Split parents come back as
+ * one row per split line (parent's date, line's amount/category/stylist), so every metric that
+ * groups by category sees the lines. Amounts still sum to the bank, so the balance is unchanged.
+ */
+export async function getMetricTxs(from?: IsoDate, to?: IsoDate): Promise<MetricTx[]> {
+  await connection();
+  return metricTxsInRange(await getDb(), from, to);
+}
+
+/** Ledger lines for the detailed P&L CSV: one per unsplit transaction, one per split line. */
+export async function getLedgerLinesInRange(from: IsoDate, to: IsoDate) {
   await connection();
   const db = await getDb();
-  return db
-    .select(txSelect)
-    .from(transactions)
-    .leftJoin(categories, eq(transactions.categoryId, categories.id))
-    .leftJoin(stylists, eq(transactions.stylistId, stylists.id))
-    .where(and(gte(transactions.date, from), lte(transactions.date, to)))
-    .orderBy(asc(transactions.date));
+  const [rows, splits] = await Promise.all([
+    db
+      .select(txSelect)
+      .from(transactions)
+      .leftJoin(categories, eq(transactions.categoryId, categories.id))
+      .leftJoin(stylists, eq(transactions.stylistId, stylists.id))
+      .where(and(gte(transactions.date, from), lte(transactions.date, to)))
+      .orderBy(asc(transactions.date), asc(transactions.createdAt)),
+    splitLinesInRange(db, from, to),
+  ]);
+  return expandLedgerLines(rows, splits);
 }
 
 export async function getSavedMapping(name: string = BMO_MAPPING_NAME): Promise<CsvMapping | null> {
@@ -196,9 +226,10 @@ export async function getCategorizer() {
   return makeCategorizer(await getDb());
 }
 
-/** Today's date, computed per request (never baked in at build time). */
+/** Today's date, computed per request (never baked in at build time). Session-checked like the reads. */
 export async function requestToday() {
   await connection();
+  await verifySession();
   return todayIso();
 }
 
@@ -217,6 +248,7 @@ export async function getBankConnection() {
       lastSyncedAt: bankConnections.lastSyncedAt,
       lastError: bankConnections.lastError,
       lastErrorAt: bankConnections.lastErrorAt,
+      lastWarning: bankConnections.lastWarning,
       createdAt: bankConnections.createdAt,
     })
     .from(bankConnections)
@@ -241,11 +273,14 @@ export async function getBankConnection() {
 
 export type BankConnectionView = NonNullable<Awaited<ReturnType<typeof getBankConnection>>>;
 
-/** Banner text when the feed needs attention (error, or no good sync for 3+ days), else null. */
-export async function getBankAttention(): Promise<string | null> {
+/** Banner content when the feed needs attention (error, no good sync for 3+ days, or a SimpleFIN warning), else null. */
+export async function getBankAttention(): Promise<BankAttention | null> {
   const c = await getBankConnection();
   if (!c) return null;
-  return bankAttention({ lastSyncedAt: c.lastSyncedAt, lastError: c.lastError, createdAt: c.createdAt, active: c.active }, new Date());
+  return bankAttention(
+    { lastSyncedAt: c.lastSyncedAt, lastError: c.lastError, lastWarning: c.lastWarning, createdAt: c.createdAt, active: c.active },
+    new Date(),
+  );
 }
 
 /** Latest default start date suggestion for a new connection: day after the newest transaction, else 90 days ago. */

@@ -47,6 +47,7 @@ async function SettingsContent() {
         }).format(bank.lastSyncedAt)
       : null,
     lastError: bank.lastError,
+    lastWarning: bank.lastWarning,
     active: bank.active,
     accounts: bank.accounts.map((a) => ({
       id: a.id,

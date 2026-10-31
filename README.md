@@ -37,7 +37,7 @@ Run scripts against a branch without writing secrets to disk (needs `npm i -g ne
 cs() { neon connection-string "$1" --database-name quitbooks --role-name quitbooks_owner $2; }
 DATABASE_URL="$(cs dev --pooled)" DATABASE_URL_UNPOOLED="$(cs dev)" npm run db:migrate
 DATABASE_URL="$(cs dev --pooled)" npm run db:seed
-DATABASE_URL="$(cs production --pooled)" npm run user:add -- john@… "John" "…"
+DATABASE_URL="$(cs production --pooled)" npm run user:add -- john@… "John" # hidden password prompt
 ```
 
 Run migrations on `dev` first, then `production`. Pushing to `main` deploys Production; any other branch gets a Preview against `dev`.
@@ -54,6 +54,25 @@ After the first deploy: sign in, set chairs and the BMO opening balance in Setti
 
 ## Scripts
 
+### Rebuild disposable test books
+
+The committed `fixtures/bmo-fake-12mo-{single,split}.csv` files each contain 439 fake transactions;
+their `.truth.json` companions contain the roster, opening balance and expected answers.
+`fixtures/simplefin-demo.json` is a saved fake bank-feed response. None requires live bank access.
+
+After `db:migrate` and creating a test login, restore the default fixture with:
+
+```bash
+DATABASE_URL=pglite:./.pglite npm run fake:restore
+# Explicit opt-in for the disposable Neon dev database only:
+DATABASE_URL="$(neon connection-string dev --database-name quitbooks --role-name quitbooks_owner)" npm run fake:restore -- --yes
+```
+
+Restore uses the real CSV parser, duplicate detection and import writer. Running it twice does not
+duplicate transactions. It refuses books with bank-feed history and never wipes existing data.
+To clear bookkeeping data first, use `npm run db:wipe -- --yes` against your **local/dev** database,
+then run `fake:restore` again. Users and passwords survive the wipe. Never run either against production.
+
 | Script | What it does |
 | --- | --- |
 | `npm run dev` / `build` / `start` | Next.js |
@@ -63,7 +82,7 @@ After the first deploy: sign in, set chairs and the BMO opening balance in Setti
 | `npm run db:migrate` | Apply migrations (Neon or PGlite) |
 | `npm run db:seed` | Starter categories and settings (idempotent) |
 | `npm run db:demo` | Sample data, PGlite only |
-| `npm run db:wipe -- --yes` | Delete transactions, import batches, rules, CSV mappings and stylists (keeps users, categories, settings) |
+| `npm run db:wipe -- --yes` | Delete transactions, import batches, rules, CSV mappings and stylists, and make the bank feed's next sync re-fetch from its start date (keeps users, categories, settings and the bank link) |
 | `npm run fake:bmo` | Generate a fabricated BMO CSV plus a `.truth.json` (see flags in `scripts/fake-bmo-csv.ts`; committed samples live in `fixtures/`) |
 | `npm run fake:load -- <truth.json>` | Load the fake roster, chair count and opening balance (PGlite only unless `--yes`). Import the CSV through the app |
 | `npm run fake:score -- <csv> <truth.json>` | Score the importer and categorizer against a truth file |
@@ -77,7 +96,9 @@ After the first deploy: sign in, set chairs and the BMO opening balance in Setti
 - **Import** parses the CSV (`src/lib/csv.ts`), detects columns, previews, then inserts. Each row gets a fingerprint so re-importing overlapping exports never double-counts.
 - **Import with categories** (`src/lib/import-categories.ts`): if the CSV has a category column (QuickBooks "Transaction Detail by Account" puts it in `Split`), the preview lists each distinct value to map to one of ours, create, or leave for the Inbox. A mapped category beats rules; Booth Rent still needs a stylist match or the row goes to the Inbox. The choices are saved inside the saved column mapping (`csv_mappings`, name `BMO:categories`). In QuickBooks Online: Reports, **Transaction Detail by Account** for the BMO account, all dates, **Cash basis**, Export (if only Excel is offered, Save As CSV). The report layout is written from memory and unverified against a real export. Importing QuickBooks bank rules is not done, because that file's format is unverified.
 - **Auto-categorizing** (`src/lib/categorize.ts`): money in whose description contains a stylist's match text becomes Booth Rent for that stylist; otherwise the first matching rule wins; otherwise it lands in the Inbox.
+- **Splits** (`src/lib/splits.ts`, `src/lib/ledger.ts`): one bank row can be split into 2+ lines, each with its own category, stylist (required for Booth Rent), amount and memo, e.g. one Zelle covering two stylists' rent, or a Square deposit net of fees (+$103 sales, −$3 fees on +$100). The lines must add up exactly to the row, so the bank balance never changes. A split row has no category of its own (`transactions.is_split`; lines in `transaction_splits`) and is never in the Inbox, rules or AI suggestions. Everything that groups by category (dashboard, P&L, CSV exports) expands split rows into their lines with one function, `expandLedgerLines`.
 - **Metrics** (`src/lib/metrics.ts`) are pure functions shared by the dashboard, reports and tests.
+- **Reports are cash basis**: the app records cash in and out of the bank, so the P&L and both CSV exports are labelled "Cash basis" (compare against QuickBooks run on cash basis).
 - **Auth** is two hand-made accounts (scrypt-hashed passwords, signed session cookie). `src/proxy.ts` guards pages; every server action and route handler re-checks.
 
 ## License

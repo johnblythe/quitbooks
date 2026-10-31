@@ -5,6 +5,9 @@ import { suggestPattern } from "./categorize";
  * Pure: the same inputs always give the same groups.
  */
 
+/** Max rows the grouped Inbox loads at once, so also the most ids one Inbox group can hold. */
+export const INBOX_LIMIT = 2000;
+
 export type InboxRow = { id: string; date: string; amountCents: number; description: string };
 
 export type InboxGroup<T extends InboxRow = InboxRow> = {

@@ -231,6 +231,14 @@ describe("file categories at commit", () => {
     const [t] = await db.select({ n: count() }).from(transactions);
     expect(t.n).toBe(0);
   });
+
+  it("refuses a category hidden after the preview", async () => {
+    await db.update(categories).set({ archived: true }).where(eq(categories.id, suppliesId));
+    await expect(run({ categoryChoices: { supplies: { type: "existing", categoryId: suppliesId } } }))
+      .rejects.toBeInstanceOf(ImportCategoryError);
+    const [t] = await db.select({ n: count() }).from(transactions);
+    expect(t.n).toBe(0);
+  });
 });
 
 describe("remembered mapping", () => {
