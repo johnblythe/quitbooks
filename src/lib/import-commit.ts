@@ -4,17 +4,21 @@
  * authenticate, validate arguments and call into here.
  */
 import { and, between, eq, inArray, isNull } from "drizzle-orm";
+import { BOOTH_RENT_KEY } from "@/db/defaults";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
 import type { CsvMapping, ParsedRow } from "./csv";
 import { addDays } from "./dates";
 import { MATCH_WINDOW_DAYS, type ManualCandidate } from "./import-match";
+import { categoryKey, resolveRowCategory, type FileCategoryChoice, type SavedCategoryChoice } from "./import-categories";
 import type { ImportLink } from "./import-schema";
 
-const { transactions, importBatches, csvMappings } = schema;
+const { transactions, importBatches, csvMappings, categories } = schema;
 
 /** Anything that can run queries: the Db itself or a transaction on it. */
 type Executor = Pick<Db, "select" | "insert" | "update">;
+
+const MAX_CHOICES = 5000;
 
 export async function existingHashes(db: Executor, hashes: string[]): Promise<Set<string>> {
   const found = new Set<string>();
@@ -69,6 +73,9 @@ export async function findManualCandidates(
   return found;
 }
 
+/** A category choice that no longer holds (the category was deleted while the user reviewed). */
+export class ImportCategoryError extends Error {}
+
 /** A confirmed link that no longer holds (the manual entry changed or was already linked). */
 export class ImportLinkError extends Error {}
 
@@ -80,6 +87,11 @@ export type CommitInput = {
   rows: ParsedRow[];
   links: ImportLink[];
   categorizer: (r: ParsedRow) => { categoryId: string | null; stylistId: string | null };
+  /**
+   * What to do with each distinct value of the file's category column, keyed by `categoryKey`.
+   * A value with no entry (or Leave for Inbox) falls through to `categorizer`.
+   */
+  categoryChoices?: Record<string, FileCategoryChoice>;
 };
 
 export type CommitOutcome = {
@@ -89,6 +101,8 @@ export type CommitOutcome = {
   /** Rows tied to an existing manual entry instead of being inserted. */
   linked: number;
   months: string[];
+  /** Categories created from "Create new" choices. */
+  createdCategories: number;
 };
 
 /**
@@ -143,6 +157,9 @@ export async function commitParsedImport(db: Db, input: CommitInput): Promise<Co
     const fresh = rows.filter((r) => !dupes.has(r.dedupeHash) && !linkLines.has(r.line));
     const duplicates = rows.filter((r) => dupes.has(r.dedupeHash)).length;
 
+    const { resolved, created, saved } = await resolveCategoryChoices(tx, fresh, input.categoryChoices ?? {});
+    const boothRentId = resolved.size ? await boothRentCategoryId(tx) : null;
+
     const [batch] = await tx
       .insert(importBatches)
       .values({
@@ -158,12 +175,13 @@ export async function commitParsedImport(db: Db, input: CommitInput): Promise<Co
     for (let i = 0; i < fresh.length; i += 200) {
       const chunk = fresh.slice(i, i + 200).map((r) => {
         const auto = input.categorizer(r);
+        const mapped = resolveRowCategory(resolved.get(categoryKey(r.category)), auto, boothRentId);
         return {
           date: r.date,
           amountCents: r.amountCents,
           description: r.description,
-          categoryId: auto.categoryId,
-          stylistId: auto.stylistId,
+          categoryId: mapped.categoryId,
+          stylistId: mapped.stylistId,
           source: "csv" as const,
           importBatchId: batch.id,
           dedupeHash: r.dedupeHash,
@@ -186,12 +204,75 @@ export async function commitParsedImport(db: Db, input: CommitInput): Promise<Co
       .set({ insertedCount: inserted, skippedCount: rows.length - inserted })
       .where(eq(importBatches.id, batch.id));
 
+    // The remembered choices ride along with the column mapping, so the same layout pre-fills next time.
+    const mapping: CsvMapping = { ...input.mapping, categoryMap: input.mapping.categoryColumn ? saved : undefined };
     await tx
       .insert(csvMappings)
-      .values({ name: input.mappingName, mapping: input.mapping })
-      .onConflictDoUpdate({ target: csvMappings.name, set: { mapping: input.mapping } });
+      .values({ name: input.mappingName, mapping })
+      .onConflictDoUpdate({ target: csvMappings.name, set: { mapping } });
 
     const months = [...new Set(fresh.map((r) => r.date.slice(0, 7)))].sort();
-    return { inserted, duplicates, linked, months };
+    return { inserted, duplicates, linked, months, createdCategories: created };
   });
+}
+
+async function boothRentCategoryId(tx: Executor): Promise<string | null> {
+  const [row] = await tx.select({ id: categories.id }).from(categories).where(eq(categories.systemKey, BOOTH_RENT_KEY));
+  return row?.id ?? null;
+}
+
+/**
+ * Turns the user's per-value choices into category ids, creating the "Create new" ones. Runs inside
+ * the import transaction, so a failed import leaves no stray categories behind.
+ * - `resolved`: category key -> id, for values that map to a category.
+ * - `saved`: what to remember for next time (a new category is remembered as the one just created).
+ * A "new" name that already exists (any case) reuses that category instead of making a twin.
+ */
+async function resolveCategoryChoices(
+  tx: Executor,
+  fresh: ParsedRow[],
+  choices: Record<string, FileCategoryChoice>,
+): Promise<{ resolved: Map<string, string>; created: number; saved: Record<string, SavedCategoryChoice> }> {
+  const entries = Object.entries(choices);
+  const resolved = new Map<string, string>();
+  const saved: Record<string, SavedCategoryChoice> = {};
+  if (!entries.length) return { resolved, created: 0, saved };
+  if (entries.length > MAX_CHOICES) throw new ImportCategoryError("That import has too many categories to map.");
+
+  const all = await tx.select({ id: categories.id, name: categories.name, archived: categories.archived }).from(categories);
+  const ids = new Set(all.filter((c) => !c.archived).map((c) => c.id));
+  const byName = new Map<string, string>();
+  for (const c of all) if (!c.archived && !byName.has(categoryKey(c.name))) byName.set(categoryKey(c.name), c.id);
+
+  const used = new Set(fresh.map((r) => categoryKey(r.category)));
+  let created = 0;
+  for (const [key, choice] of entries) {
+    if (choice.type === "inbox") {
+      saved[key] = choice;
+      continue;
+    }
+    if (choice.type === "existing") {
+      if (!ids.has(choice.categoryId)) {
+        throw new ImportCategoryError("A category you picked is hidden or no longer exists. Preview the file again.");
+      }
+      resolved.set(key, choice.categoryId);
+      saved[key] = choice;
+      continue;
+    }
+    if (!used.has(key)) continue; // nothing being imported uses it, so don't create it
+    const name = choice.name.trim().slice(0, 60);
+    let id = byName.get(categoryKey(name));
+    if (!id) {
+      const [row] = await tx
+        .insert(categories)
+        .values({ name, kind: choice.kind, sortOrder: 1000 })
+        .returning({ id: categories.id });
+      id = row.id;
+      byName.set(categoryKey(name), id);
+      created++;
+    }
+    resolved.set(key, id);
+    saved[key] = { type: "existing", categoryId: id };
+  }
+  return { resolved, created, saved };
 }

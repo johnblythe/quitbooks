@@ -37,7 +37,7 @@ Run scripts against a branch without writing secrets to disk (needs `npm i -g ne
 cs() { neon connection-string "$1" --database-name quitbooks --role-name quitbooks_owner $2; }
 DATABASE_URL="$(cs dev --pooled)" DATABASE_URL_UNPOOLED="$(cs dev)" npm run db:migrate
 DATABASE_URL="$(cs dev --pooled)" npm run db:seed
-DATABASE_URL="$(cs production --pooled)" npm run user:add -- john@… "John" "…"
+DATABASE_URL="$(cs production --pooled)" npm run user:add -- john@… "John" # hidden password prompt
 ```
 
 Run migrations on `dev` first, then `production`. Pushing to `main` deploys Production; any other branch gets a Preview against `dev`.
@@ -94,6 +94,7 @@ then run `fake:restore` again. Users and passwords survive the wipe. Never run e
 - **Money** is integer cents. Transactions are signed: positive in, negative out.
 - **Categories** are income, expense, or transfer. Transfers (owner draws, contributions) are excluded from P&L but count toward the bank balance.
 - **Import** parses the CSV (`src/lib/csv.ts`), detects columns, previews, then inserts. Each row gets a fingerprint so re-importing overlapping exports never double-counts.
+- **Import with categories** (`src/lib/import-categories.ts`): if the CSV has a category column (QuickBooks "Transaction Detail by Account" puts it in `Split`), the preview lists each distinct value to map to one of ours, create, or leave for the Inbox. A mapped category beats rules; Booth Rent still needs a stylist match or the row goes to the Inbox. The choices are saved inside the saved column mapping (`csv_mappings`, name `BMO:categories`). In QuickBooks Online: Reports, **Transaction Detail by Account** for the BMO account, all dates, **Cash basis**, Export (if only Excel is offered, Save As CSV). The report layout is written from memory and unverified against a real export. Importing QuickBooks bank rules is not done, because that file's format is unverified.
 - **Auto-categorizing** (`src/lib/categorize.ts`): money in whose description contains a stylist's match text becomes Booth Rent for that stylist; otherwise the first matching rule wins; otherwise it lands in the Inbox.
 - **Splits** (`src/lib/splits.ts`, `src/lib/ledger.ts`): one bank row can be split into 2+ lines, each with its own category, stylist (required for Booth Rent), amount and memo, e.g. one Zelle covering two stylists' rent, or a Square deposit net of fees (+$103 sales, −$3 fees on +$100). The lines must add up exactly to the row, so the bank balance never changes. A split row has no category of its own (`transactions.is_split`; lines in `transaction_splits`) and is never in the Inbox, rules or AI suggestions. Everything that groups by category (dashboard, P&L, CSV exports) expands split rows into their lines with one function, `expandLedgerLines`.
 - **Metrics** (`src/lib/metrics.ts`) are pure functions shared by the dashboard, reports and tests.

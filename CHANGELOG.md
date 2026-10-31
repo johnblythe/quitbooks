@@ -2,6 +2,7 @@
 
 ## Release integration — 2026-10-31
 
+- Import mapping review: dated transactions whose payee starts with "Total" are never skipped as report totals; categories hidden after preview are rejected atomically; failed imports keep their file and choices for correction and retry.
 - Rebuilt the splits migration as 0006 after the reviewed bank-sync migrations.
 - Preserved bank amount/date/delete locks on split transactions, with atomic edit guards and regression tests.
 - Added `fake:restore`: reload the committed 439-row BMO fixture through the real importer, without duplicate transactions; documented the local/dev wipe-and-restore cycle.
@@ -11,13 +12,20 @@ All notable changes to this project are documented here, in the [Keep a Changelo
 ## [Unreleased] - 2026-10-24
 
 ### Added
+- CSV import with category mapping, for a QuickBooks Online export or any CSV with a category column:
+  - an optional Category column in the column mapping (QuickBooks' "Split" is detected automatically), plus Name and Memo joined into the description with duplicates dropped;
+  - a preview step listing each distinct category in the file with its row count and net total, to map to an existing category, create as new (editable name and kind), or leave for the Inbox;
+  - sensible defaults: exact name match, QuickBooks placeholders (-Split-, Uncategorized, Ask My Accountant, blank) to the Inbox, new categories typed by row direction and as transfers for owner equity names;
+  - a mapped category beats rules, except Booth Rent, which still needs a stylist from stylist matching and otherwise goes to the Inbox;
+  - new categories are created inside the same atomic commit, and the choices are saved with the column mapping so a re-import pre-fills them;
+  - QuickBooks "Transaction Detail by Account" report lines (section headings, "Total for" rows, the "Cash Basis" footer) are skipped and counted instead of flagged as errors.
 - Split transactions:
   - split any row (bank feed, CSV or manual) into 2 or more lines, each with a category, a stylist (required for Booth Rent), an amount and an optional memo; lines can mix signs (a Square deposit net of fees);
   - the lines must add up exactly to the row, checked live in the editor ("Left to assign") and again on the server; the row's amount is locked while split;
   - the split editor opens from the transaction page and from Inbox one-off cards; "Remove split" turns the row back into one (back to the Inbox unless a category is picked);
   - the dashboard, P&L, summary CSV and detailed CSV (one row per line) use the lines; the transactions list shows a "Split · N" pill;
   - split rows never appear in the Inbox, rules, the rule tester's Inbox count or AI suggestions;
-  - migration `0004` adds `transactions.is_split` and the `transaction_splits` table.
+  - migration `0006` adds `transactions.is_split` and the `transaction_splits` table.
 - "Cash basis" labels on the P&L page, its print view, and the first line of both CSV exports.
 - Automatic bank sync through SimpleFIN Bridge:
   - a one-time link in Settings → Bank connection;

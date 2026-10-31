@@ -2,6 +2,7 @@ import Papa from "papaparse";
 import { createHash } from "node:crypto";
 import { parseBankDate, type IsoDate } from "./dates";
 import { parseAmountToCents } from "./money";
+import type { SavedCategoryChoice } from "./import-categories";
 
 /**
  * How to read a bank CSV. BMO's export format hasn't been confirmed yet, so detection is
@@ -19,6 +20,17 @@ export type CsvMapping = {
   invertSign?: boolean;
   /** Optional extra column appended to the description (e.g. a memo / Zelle sender column). */
   memoColumn?: string;
+  /**
+   * Optional column holding the category the file's owner already chose (QuickBooks "Split", a
+   * credit-card export's "Category"). Each distinct value is mapped to one of our categories in the
+   * import preview.
+   */
+  categoryColumn?: string;
+  /**
+   * Remembered file-category -> our-category choices, keyed by `categoryKey(value)`. Saved with the
+   * mapping so the next import of the same layout pre-fills them. Never read while parsing.
+   */
+  categoryMap?: Record<string, SavedCategoryChoice>;
 };
 
 export type ParsedRow = {
@@ -28,6 +40,8 @@ export type ParsedRow = {
   amountCents: number;
   description: string;
   dedupeHash: string;
+  /** The category column's text for this row, trimmed ("" when unmapped or blank). */
+  category: string;
 };
 
 export type RowError = { line: number; message: string };
@@ -37,6 +51,11 @@ export type CsvParseResult = {
   mapping: CsvMapping | null;
   rows: ParsedRow[];
   errors: RowError[];
+  /**
+   * Report furniture skipped without complaint: section headings, "Total for ..." rows, the
+   * "Cash Basis ..." footer, and rows with neither a date nor an amount (QuickBooks reports).
+   */
+  skippedLines: number;
 };
 
 const DATE_HEADERS = ["posting date", "post date", "transaction date", "date", "posted date"];
@@ -45,6 +64,9 @@ const AMOUNT_HEADERS = ["amount", "transaction amount", "amount ($)"];
 const DEBIT_HEADERS = ["debit", "debits", "withdrawal", "withdrawals", "withdrawal amount", "money out"];
 const CREDIT_HEADERS = ["credit", "credits", "deposit", "deposits", "deposit amount", "money in"];
 const MEMO_HEADERS = ["memo", "notes", "additional info", "extended description"];
+// QuickBooks' "Split" column is the other side of the entry, i.e. the category. Exact matches only,
+// except "category" itself, so a bank's "Account Number" style column isn't mistaken for one.
+const CATEGORY_HEADERS = ["category", "categories", "split"];
 
 function findHeader(headers: string[], candidates: string[]): string | undefined {
   const lower = headers.map((h) => h.trim().toLowerCase());
@@ -60,6 +82,16 @@ function findHeader(headers: string[], candidates: string[]): string | undefined
   return undefined;
 }
 
+function findCategoryHeader(headers: string[]): string | undefined {
+  const lower = headers.map((h) => h.trim().toLowerCase());
+  for (const c of CATEGORY_HEADERS) {
+    const i = lower.indexOf(c);
+    if (i >= 0) return headers[i];
+  }
+  const i = lower.findIndex((h) => h.includes("category"));
+  return i >= 0 ? headers[i] : undefined;
+}
+
 /** Best-guess mapping from the header row. Returns null if it can't find date + description + amount. */
 export function detectMapping(headers: string[]): CsvMapping | null {
   const dateColumn = findHeader(headers, DATE_HEADERS);
@@ -69,17 +101,35 @@ export function detectMapping(headers: string[]): CsvMapping | null {
   const memoCandidate = findHeader(headers, MEMO_HEADERS);
   const memoColumn = memoCandidate && memoCandidate !== descriptionColumn ? memoCandidate : undefined;
 
+  const categoryCandidate = findCategoryHeader(headers);
+  const categoryColumn =
+    categoryCandidate && categoryCandidate !== descriptionColumn && categoryCandidate !== memoColumn
+      ? categoryCandidate
+      : undefined;
+
   const debitColumn = findHeader(headers, DEBIT_HEADERS);
   const creditColumn = findHeader(headers, CREDIT_HEADERS);
   if (debitColumn && creditColumn && debitColumn !== creditColumn) {
-    return { dateColumn, descriptionColumn, amountMode: "split", debitColumn, creditColumn, memoColumn };
+    return { dateColumn, descriptionColumn, amountMode: "split", debitColumn, creditColumn, memoColumn, categoryColumn };
   }
 
   const amountColumn = findHeader(headers, AMOUNT_HEADERS);
   if (amountColumn) {
-    return { dateColumn, descriptionColumn, amountMode: "single", amountColumn, memoColumn };
+    return { dateColumn, descriptionColumn, amountMode: "single", amountColumn, memoColumn, categoryColumn };
   }
   return null;
+}
+
+/** Does every column this mapping names exist in `headers`? */
+export function mappingFits(m: CsvMapping, headers: string[]): boolean {
+  const have = new Set(headers);
+  const needed = [
+    m.dateColumn,
+    m.descriptionColumn,
+    ...(m.amountMode === "single" ? [m.amountColumn] : [m.debitColumn, m.creditColumn]),
+  ];
+  if (needed.some((c) => !c || !have.has(c))) return false;
+  return [m.memoColumn, m.categoryColumn].every((c) => !c || have.has(c));
 }
 
 export function normalizeDescription(s: string): string {
@@ -125,6 +175,34 @@ function readAmount(
   return { cents, rawCents: cents };
 }
 
+/** Name (payee) first, then the memo, leaving out whichever one already contains the other. */
+export function joinDescription(name: string, memo: string): string {
+  const n = name.toLowerCase();
+  const m = memo.toLowerCase();
+  let out = name;
+  if (memo && !n.includes(m)) out = name ? (m.includes(n) ? memo : `${name} — ${memo}`) : memo;
+  return out || "(no description)";
+}
+
+const REPORT_FURNITURE = /^(total\b|(cash|accrual) basis\b)/i;
+
+/**
+ * Is this record report furniture rather than a transaction? True for "Total for ..." / "TOTAL" rows,
+ * the "Cash Basis ..." / "Accrual Basis ..." footer, and rows with no readable date and no amount at
+ * all (QuickBooks section headings that carry just an account name). A row with an amount but a
+ * bad date is NOT furniture: that is a real parse error.
+ */
+function isReportLine(record: Record<string, string>, mapping: CsvMapping, hasDate: boolean): boolean {
+  // A dated bank row is activity even when its payee starts with "Total" and precedes the date.
+  if (hasDate) return false;
+  const cells = Object.values(record).filter((v): v is string => typeof v === "string");
+  const first = cells.map((c) => c.trim()).find(Boolean) ?? "";
+  if (REPORT_FURNITURE.test(first)) return true;
+  const amountCols =
+    mapping.amountMode === "single" ? [mapping.amountColumn] : [mapping.debitColumn, mapping.creditColumn];
+  return amountCols.every((c) => !(record[c ?? ""] ?? "").trim());
+}
+
 /**
  * Parses a bank CSV into normalized rows.
  * - If `mapping` is omitted, it's detected from the headers.
@@ -167,7 +245,7 @@ export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvPars
   const headers = (parsed.meta.fields ?? []).filter(Boolean);
   const effective = mapping ?? detectMapping(headers);
 
-  const result: CsvParseResult = { headers, mapping: effective, rows: [], errors: [] };
+  const result: CsvParseResult = { headers, mapping: effective, rows: [], errors: [], skippedLines: 0 };
   if (!effective) {
     result.errors.push({
       line: start + 1,
@@ -177,10 +255,16 @@ export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvPars
   }
 
   const seen = new Map<string, number>();
+  const skippedIdx = new Set<number>();
   parsed.data.forEach((record, idx) => {
     const line = start + idx + 2; // +1 for header, +1 for 1-based
     const rawDate = record[effective.dateColumn] ?? "";
     const date = parseBankDate(rawDate);
+    if (isReportLine(record, effective, date !== null)) {
+      skippedIdx.add(idx);
+      result.skippedLines++;
+      return;
+    }
     if (!date) {
       result.errors.push({ line, message: `Unrecognized date "${rawDate}"` });
       return;
@@ -196,10 +280,9 @@ export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvPars
       return;
     }
     const descriptionCell = normalizeDescription(record[effective.descriptionColumn] ?? "");
-    let description = descriptionCell;
     const memo = effective.memoColumn ? normalizeDescription(record[effective.memoColumn] ?? "") : "";
-    if (memo && !description.includes(memo)) description = description ? `${description} — ${memo}` : memo;
-    if (!description) description = "(no description)";
+    const description = joinDescription(descriptionCell, memo);
+    const category = effective.categoryColumn ? normalizeDescription(record[effective.categoryColumn] ?? "") : "";
 
     const key = identityKey(date, amount.rawCents, descriptionCell);
     const occurrence = seen.get(key) ?? 0;
@@ -211,10 +294,14 @@ export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvPars
       amountCents,
       description,
       dedupeHash: fingerprint(key, occurrence),
+      category,
     });
   });
 
   for (const e of parsed.errors) {
+    // Papa flags ragged rows; report furniture (section headings, footers) is ragged by nature and
+    // was already counted as skipped.
+    if (e.type === "FieldMismatch" && skippedIdx.has(e.row ?? -1)) continue;
     result.errors.push({ line: (e.row ?? 0) + start + 2, message: e.message });
   }
   return result;
