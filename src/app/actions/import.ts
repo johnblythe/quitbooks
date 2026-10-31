@@ -6,7 +6,7 @@ import { parseBankCsv, type CsvMapping, type RowError } from "@/lib/csv";
 import { BMO_MAPPING_NAME, getCategorizer } from "@/lib/data";
 import { commitParsedImport, existingHashes, findManualCandidates, ImportLinkError } from "@/lib/import-commit";
 import { matchManualEntries } from "@/lib/import-match";
-import { activeCutoverDate } from "@/lib/bank-sync-server";
+import { csvCutoverDate } from "@/lib/bank-sync-server";
 import { splitByCutover } from "@/lib/bank-cutover";
 import { csvByteLength, MAX_CSV_BYTES, TOO_BIG_MESSAGE } from "@/lib/import-limits";
 import { csvMappingSchema, csvTextSchema, filenameSchema, linksSchema, type ImportLink } from "@/lib/import-schema";
@@ -78,7 +78,7 @@ export async function previewImport(text: unknown, mapping: unknown): Promise<Im
 
   const db = await getDb();
   const parsedAll = parseBankCsv(t.data, m.data);
-  const { kept, covered } = splitByCutover(parsedAll.rows, await activeCutoverDate(db));
+  const { kept, covered } = splitByCutover(parsedAll.rows, await csvCutoverDate(db));
   const parsed = { ...parsedAll, rows: kept };
   const dupes = await existingHashes(db, parsed.rows.map((r) => r.dedupeHash));
   const categorizer = await getCategorizer();
@@ -147,7 +147,7 @@ export async function commitImport(
   const db = await getDb();
   const parsedAll = parseBankCsv(t.data, m.data);
   if (!parsedAll.rows.length) return { ok: false, error: "No rows to import." };
-  const { kept, covered } = splitByCutover(parsedAll.rows, await activeCutoverDate(db));
+  const { kept, covered } = splitByCutover(parsedAll.rows, await csvCutoverDate(db));
   const parsed = { ...parsedAll, rows: kept };
   if (parsed.errors.length && ackErrors !== true) {
     return {

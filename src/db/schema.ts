@@ -88,8 +88,15 @@ export const bankConnections = pgTable("bank_connections", {
   /** Feed rows dated before this are ignored; CSV rows on/after it are skipped. */
   cutoverDate: date("cutover_date").notNull(),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  /**
+   * The next sync fetches from cutoverDate instead of lastSyncedAt - 7 days. Set when the start date
+   * moves earlier, an account is added, or the books are wiped; cleared by a good sync.
+   */
+  fullSyncPending: boolean("full_sync_pending").notNull().default(false),
   lastError: text("last_error"),
   lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  /** SimpleFIN errors about other connections on the Bridge, from the last sync. Shown, but the sync still counts. */
+  lastWarning: text("last_warning"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -97,10 +104,18 @@ export const bankAccounts = pgTable(
   "bank_accounts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    connectionId: uuid("connection_id")
-      .notNull()
-      .references(() => bankConnections.id, { onDelete: "cascade" }),
+    /**
+     * Null after a disconnect: the row is kept so feed transactions stay tied to it, and connecting
+     * the same SimpleFIN account again re-attaches it (by externalId) instead of importing twice.
+     */
+    connectionId: uuid("connection_id").references(() => bankConnections.id, { onDelete: "set null" }),
+    /** SimpleFIN's account id. One row per SimpleFIN account, whichever connection it's under. */
     externalId: text("external_id").notNull(),
+    /**
+     * SimpleFIN's id for the bank login this account is under (`conn_id`), so an error about that
+     * login is recognized as ours even when SimpleFIN leaves the account out of the response.
+     */
+    connId: text("conn_id"),
     name: text("name").notNull(),
     orgName: text("org_name").notNull().default(""),
     currency: text("currency").notNull().default("USD"),
@@ -111,10 +126,10 @@ export const bankAccounts = pgTable(
     include: boolean("include").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("bank_accounts_conn_ext_idx").on(t.connectionId, t.externalId)],
+  (t) => [uniqueIndex("bank_accounts_ext_idx").on(t.externalId)],
 );
 
-/** One row per sync attempt, for debugging the feed. */
+/** One row per sync attempt (or account-list fetch), for debugging the feed and counting requests. */
 export const bankSyncRuns = pgTable("bank_sync_runs", {
   id: uuid("id").primaryKey().defaultRandom(),
   connectionId: uuid("connection_id").references(() => bankConnections.id, { onDelete: "cascade" }),
@@ -124,6 +139,8 @@ export const bankSyncRuns = pgTable("bank_sync_runs", {
   linked: integer("linked").notNull().default(0),
   skipped: integer("skipped").notNull().default(0),
   error: text("error"),
+  /** SimpleFIN requests this run made (or has reserved, while running). Feeds the daily request budget. */
+  requests: integer("requests").notNull().default(0),
 });
 
 export const transactions = pgTable(

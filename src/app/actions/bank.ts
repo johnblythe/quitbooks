@@ -6,7 +6,14 @@ import { z } from "zod";
 import { getDb, schema } from "@/db";
 import { suggestCategories } from "@/lib/ai-suggest-server";
 import { requireUser } from "@/lib/auth";
-import { connectBank, disconnectBank, saveBankSelection, syncConnectionThrottled } from "@/lib/bank-sync-server";
+import {
+  BUDGET_USED_NOTE,
+  connectBank,
+  disconnectBank,
+  refreshBankAccounts,
+  saveBankSelection,
+  syncConnectionThrottled,
+} from "@/lib/bank-sync-server";
 import { redactSecrets } from "@/lib/simplefin";
 
 export type BankState = { error?: string; ok?: string } | undefined;
@@ -21,10 +28,15 @@ function syncMessage(r: Awaited<ReturnType<typeof syncConnectionThrottled>>): Ba
     return { ok: `Synced a moment ago. Try again in about ${r.retryInMinutes} minute${r.retryInMinutes === 1 ? "" : "s"}.` };
   }
   if (r.errors.length) return { error: redactSecrets(r.errors.join("; ")) };
-  return { ok: `Synced: ${r.inserted} new, ${r.linked} matched to entries you typed in.` };
+  if (r.warnings.includes(BUDGET_USED_NOTE)) return { ok: BUDGET_USED_NOTE };
+  const note = r.warnings.length ? ` Note: ${redactSecrets(r.warnings.join("; "))}` : "";
+  return { ok: `Synced: ${r.inserted} new, ${r.linked} matched to entries you typed in.${note}` };
 }
 
-/** Claims the one-time setup token and stores the accounts. The next step picks accounts and a start date. */
+/**
+ * Claims the one-time setup token and stores the accounts. The next step picks accounts and a start
+ * date. If the token was claimed but the accounts didn't load, the setup form offers a retry.
+ */
 export async function connectBankAction(_prev: BankState, formData: FormData): Promise<BankState> {
   await requireUser();
   const token = z.string().trim().min(10).max(2000).safeParse(formData.get("token"));
@@ -32,13 +44,29 @@ export async function connectBankAction(_prev: BankState, formData: FormData): P
   const db = await getDb();
   const [existing] = await db.select({ id: schema.bankConnections.id }).from(schema.bankConnections).limit(1);
   if (existing) return { error: "A bank is already connected. Disconnect it first." };
+  let accountsError: string | undefined;
   try {
-    await connectBank({ db }, token.data);
+    ({ accountsError } = await connectBank({ db }, token.data));
   } catch (e) {
     return { error: safeMessage(e) };
   }
   refresh();
-  return { ok: "Connected. Pick the account to sync." };
+  return accountsError ? { error: `Linked, but the accounts didn't load: ${accountsError}` } : { ok: "Connected. Pick the account to sync." };
+}
+
+/** Re-fetches the account list of a linked bank whose accounts didn't load, without a new token. */
+export async function refreshBankAccountsAction(_prev: BankState, formData: FormData): Promise<BankState> {
+  await requireUser();
+  const id = z.uuid().safeParse(formData.get("connectionId"));
+  if (!id.success) return { error: "Unknown connection." };
+  try {
+    await refreshBankAccounts({ db: await getDb() }, id.data);
+  } catch (e) {
+    refresh();
+    return { error: safeMessage(e) };
+  }
+  refresh();
+  return { ok: "Accounts loaded." };
 }
 
 /** Saves the chosen accounts and start date, then runs the first sync. */
@@ -86,7 +114,7 @@ export async function syncBankNowAction(_prev: BankState, formData: FormData): P
   }
 }
 
-/** Deletes the connection, accounts and encrypted URL. Imported transactions stay. */
+/** Deletes the connection and encrypted URL; its accounts are kept, detached (see disconnectBank). Imported transactions stay. */
 export async function disconnectBankAction(formData: FormData) {
   await requireUser();
   const id = z.uuid().safeParse(formData.get("connectionId"));

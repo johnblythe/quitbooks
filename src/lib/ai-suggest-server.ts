@@ -17,15 +17,28 @@ import {
   type SuggestCategory,
   type SuggestGroup,
 } from "./ai-suggest";
-import { chunk, groupInbox } from "./inbox";
+import { INBOX_LIMIT, chunk, groupInbox } from "./inbox";
 import { inInbox } from "./inbox-where";
 
 const { transactions, categories } = schema;
 
 export const SUGGEST_MODEL = "claude-haiku-5-5";
-export const SUGGEST_MAX_TOKENS = 4000;
+/**
+ * Haiku 5.5 runs adaptive thinking by default (effort "low" thins it out but doesn't turn it off),
+ * and thinking counts toward max_tokens. An answer is roughly 40 tokens a group, so a 16-group
+ * batch needs under 1,000; the rest is headroom for thinking. A batch that still runs out is split
+ * and retried (see suggestCategories).
+ */
+export const SUGGEST_MAX_TOKENS = 8000;
 /** Most uncategorized rows considered per run (newest first), matching the Inbox cap. */
-export const SUGGEST_ROW_LIMIT = 2000;
+export const SUGGEST_ROW_LIMIT = INBOX_LIMIT;
+/**
+ * Most model requests one background run makes (cron or after a sync), so a big backlog can't turn
+ * into a long chain of calls. The rest waits for the next run, or the Inbox asks for it lazily.
+ */
+export const MAX_BATCHES_PER_RUN = 8;
+/** Failed batches in a row that end a run: by then the failure is probably not about one batch. */
+const MAX_FAILED_IN_A_ROW = 2;
 const EXAMPLE_ROWS_SCANNED = 300;
 const ID_CHUNK = 500;
 
@@ -38,7 +51,7 @@ export type SuggestClient = {
 };
 
 export type SuggestResult = {
-  /** Uncategorized rows that had no suggestion and were sent to the model. */
+  /** Uncategorized rows that had no suggestion, which this run set out to ask about. */
   requested: number;
   /** Rows that now have a stored suggestion. */
   suggested: number;
@@ -67,7 +80,10 @@ function logError(e: unknown): string {
 }
 
 export type SuggestGroupInput = { key: string; ids: string[] };
-/** `results` is keyed by the caller's group key. `error` means nothing was written for this chunk. */
+/**
+ * `results` is keyed by the caller's group key. `error` means no suggestion was stored for this
+ * chunk; a refusal, or a single group that ran out of tokens, still marks its rows as asked.
+ */
 export type SuggestGroupsResult =
   | {
       results: Record<string, { categoryId: string | null }>;
@@ -80,7 +96,9 @@ export type SuggestGroupsResult =
  * (`suggested_at` set) are not sent again; their stored suggestion is returned. Everything else is
  * sent once, and the answer (or null = "asked, no suggestion") is written in one transaction,
  * guarded so a row sorted or suggested meanwhile is left alone. Best-effort: never throws, and an
- * API error or missing key writes nothing and returns `{ error }`.
+ * API error or missing key writes nothing and returns `{ error }`. A refusal, or one group whose
+ * answer still doesn't fit max_tokens, marks the rows as asked with no suggestion (so they aren't
+ * re-sent on every run) and also returns `{ error }`.
  */
 export async function suggestForGroups(opts: {
   db: Db;
@@ -178,14 +196,16 @@ export async function suggestForGroups(opts: {
           format: zodOutputFormat(suggestOutputSchema(cats)),
         },
       });
-      if (response.stop_reason === "refusal" || response.stop_reason === "max_tokens") {
-        return { error: `model_${response.stop_reason}` };
-      }
+      // Several groups that ran out of tokens can be retried smaller; the caller splits them.
+      if (response.stop_reason === "max_tokens" && toAsk.length > 1) return { error: "model_max_tokens" };
+      const giveUp = response.stop_reason === "refusal" || response.stop_reason === "max_tokens";
       const valid = new Map(
-        validateSuggestions(response.parsed_output, {
-          categories: cats,
-          groups: toAsk,
-        }).map((v) => [v.key, v.categoryId]),
+        giveUp
+          ? []
+          : validateSuggestions(response.parsed_output, {
+              categories: cats,
+              groups: toAsk,
+            }).map((v) => [v.key, v.categoryId]),
       );
       const now = new Date();
       await db.transaction(async (tx) => {
@@ -209,6 +229,7 @@ export async function suggestForGroups(opts: {
           chosen.set(g.key, categoryId);
         }
       });
+      if (giveUp) return { error: `model_${response.stop_reason}` };
     }
 
     const results: Record<string, { categoryId: string | null }> = {};
@@ -261,18 +282,32 @@ export async function suggestCategories(opts: { db: Db; client?: SuggestClient }
       ...oneOffs.map((r) => ({ key: `row|${r.id}`, ids: [r.id] })),
     ];
 
-    for (const batch of chunk(all, MAX_GROUPS_PER_REQUEST)) {
+    const queue = chunk(all, MAX_GROUPS_PER_REQUEST);
+    let failedInARow = 0;
+    while (queue.length && result.batches < MAX_BATCHES_PER_RUN) {
+      const batch = queue.shift()!;
       result.batches++;
       const r = await suggestForGroups({
         db,
         client: opts.client,
         groups: batch,
       });
-      if ("error" in r) {
-        result.error = r.error;
-        break; // auth, rate-limit and outage errors would repeat; try again next run
+      if (!("error" in r)) {
+        result.suggested += r.suggestedRows;
+        failedInARow = 0;
+        continue;
       }
-      result.suggested += r.suggestedRows;
+      // The answer didn't fit: retry the batch as two halves.
+      if (r.error === "model_max_tokens" && batch.length > 1) {
+        const mid = Math.ceil(batch.length / 2);
+        queue.unshift(batch.slice(0, mid), batch.slice(mid));
+        continue;
+      }
+      result.error = r.error;
+      // Auth, rate-limit, outage and missing-key errors would repeat for every batch; try again next run.
+      if (r.error === "no_api_key" || r.error.startsWith("api_error_")) break;
+      // Anything else (a refusal, one group that still doesn't fit) skips this batch; two in a row end the run.
+      if (++failedInARow >= MAX_FAILED_IN_A_ROW) break;
     }
   } catch (e) {
     result.error = logError(e);

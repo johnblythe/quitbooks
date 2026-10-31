@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { INBOX_LIMIT } from "./inbox";
 
 /** Body of POST /api/inbox/suggest: a few Inbox groups per request. Single source of truth. */
 export const suggestGroupsInput = z
-  .array(z.object({ key: z.string().min(1).max(200), ids: z.array(z.uuid()).min(1).max(500) }))
+  .array(z.object({ key: z.string().min(1).max(200), ids: z.array(z.uuid()).min(1).max(INBOX_LIMIT) }))
   .min(1)
   .max(12);
 

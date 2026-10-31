@@ -1,22 +1,34 @@
 import "server-only";
 import { connection } from "next/server";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
-import { getDb, schema } from "@/db";
+import { getDb as openDb, schema } from "@/db";
 import { BOOTH_RENT_KEY, SETTING_KEYS, type OpeningBalance } from "@/db/defaults";
 import type { CsvMapping } from "./csv";
 import { makeCategorizer } from "./categorizer";
 import { defaultCutover } from "./bank-status";
 import { monthEnd, monthStart, todayIso, type IsoDate, type MonthKey } from "./dates";
+import { INBOX_LIMIT } from "./inbox";
 import type { MetricTx } from "./metrics";
 import { inInbox } from "./inbox-where";
 import { expandLedgerLines } from "./ledger";
 import { metricTxsInRange, splitLinesFor, splitLinesInRange } from "./split-server";
-import { bankAttention } from "./bank-status";
+import { bankAttention, type BankAttention } from "./bank-status";
+import { verifySession } from "./auth";
 
 /**
  * Data access layer. Every read awaits connection() so it runs at request time
  * (Cache Components would otherwise try to prerender it at build).
  */
+
+/**
+ * Every read below gets the database through this, so every page re-checks the session (the user
+ * exists and session_version still matches) and redirects to /login if it doesn't. The proxy only
+ * checks the cookie signature.
+ */
+async function getDb() {
+  await verifySession();
+  return openDb();
+}
 
 const { categories, stylists, transactions, rules, settings, csvMappings, importBatches, bankConnections, bankAccounts } = schema;
 
@@ -83,6 +95,7 @@ const txSelect = {
   description: transactions.description,
   note: transactions.note,
   source: transactions.source,
+  externalId: transactions.externalId,
   categoryId: transactions.categoryId,
   stylistId: transactions.stylistId,
   isSplit: transactions.isSplit,
@@ -129,8 +142,8 @@ export async function getUncategorized(limit = 100) {
     .limit(limit);
 }
 
-/** Max rows the grouped Inbox loads at once. */
-export const INBOX_LIMIT = 2000;
+/** Max rows the grouped Inbox loads at once (defined in inbox.ts so the suggest route can share it). */
+export { INBOX_LIMIT };
 
 /** Every uncategorized row for the grouped Inbox (capped), plus the true total. */
 export async function getInboxRows(limit = INBOX_LIMIT) {
@@ -211,9 +224,10 @@ export async function getCategorizer() {
   return makeCategorizer(await getDb());
 }
 
-/** Today's date, computed per request (never baked in at build time). */
+/** Today's date, computed per request (never baked in at build time). Session-checked like the reads. */
 export async function requestToday() {
   await connection();
+  await verifySession();
   return todayIso();
 }
 
@@ -232,6 +246,7 @@ export async function getBankConnection() {
       lastSyncedAt: bankConnections.lastSyncedAt,
       lastError: bankConnections.lastError,
       lastErrorAt: bankConnections.lastErrorAt,
+      lastWarning: bankConnections.lastWarning,
       createdAt: bankConnections.createdAt,
     })
     .from(bankConnections)
@@ -256,11 +271,14 @@ export async function getBankConnection() {
 
 export type BankConnectionView = NonNullable<Awaited<ReturnType<typeof getBankConnection>>>;
 
-/** Banner text when the feed needs attention (error, or no good sync for 3+ days), else null. */
-export async function getBankAttention(): Promise<string | null> {
+/** Banner content when the feed needs attention (error, no good sync for 3+ days, or a SimpleFIN warning), else null. */
+export async function getBankAttention(): Promise<BankAttention | null> {
   const c = await getBankConnection();
   if (!c) return null;
-  return bankAttention({ lastSyncedAt: c.lastSyncedAt, lastError: c.lastError, createdAt: c.createdAt, active: c.active }, new Date());
+  return bankAttention(
+    { lastSyncedAt: c.lastSyncedAt, lastError: c.lastError, lastWarning: c.lastWarning, createdAt: c.createdAt, active: c.active },
+    new Date(),
+  );
 }
 
 /** Latest default start date suggestion for a new connection: day after the newest transaction, else 90 days ago. */

@@ -6,6 +6,7 @@ import { TransactionForm } from "@/components/transaction-form";
 import { Button, ButtonLink, Card, Money, PageHeader, Skeleton } from "@/components/ui";
 import { getCategories, getSplitLines, getStylists, getTransaction } from "@/lib/data";
 import { monthOf } from "@/lib/dates";
+import { FEED_LOCKED_NOTE, isFeedLinked } from "@/lib/transaction-guards";
 
 export const metadata: Metadata = { title: "Edit transaction" };
 
@@ -31,6 +32,7 @@ async function EditForm({ params }: { params: Promise<{ id: string }> }) {
   ]);
   if (!tx) notFound();
   const splitHref = `/transactions/${tx.id}/split`;
+  const feedLinked = isFeedLinked(tx);
 
   return (
     <div className="space-y-4">
@@ -67,6 +69,7 @@ async function EditForm({ params }: { params: Promise<{ id: string }> }) {
           stylists={stylists.map((s) => ({ id: s.id, name: s.name }))}
           submitLabel="Save changes"
           split={tx.isSplit}
+          lockedNote={feedLinked ? FEED_LOCKED_NOTE : undefined}
         />
       </Card>
       {tx.isSplit ? null : (
@@ -79,13 +82,19 @@ async function EditForm({ params }: { params: Promise<{ id: string }> }) {
           Imported from a bank CSV. If you delete it, importing a file that includes it again will add it back.
         </p>
       ) : null}
-      <form action={deleteTransaction}>
-        <input type="hidden" name="id" value={tx.id} />
-        <input type="hidden" name="month" value={monthOf(tx.date)} />
-        <Button type="submit" variant="danger" className="w-full">
-          Delete transaction
-        </Button>
-      </form>
+      {!feedLinked ? (
+        <form action={deleteTransaction}>
+          <input type="hidden" name="id" value={tx.id} />
+          <input type="hidden" name="month" value={monthOf(tx.date)} />
+          <Button type="submit" variant="danger" className="w-full">
+            Delete transaction
+          </Button>
+        </form>
+      ) : (
+        <p className="px-1 text-xs text-ink-2">
+          From your bank feed. It&apos;s real bank activity, so it can&apos;t be deleted. Give it a category instead.
+        </p>
+      )}
     </div>
   );
 }

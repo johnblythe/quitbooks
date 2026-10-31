@@ -9,7 +9,17 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "@/db";
 import * as schema from "@/db/schema";
-import { SUGGEST_MAX_TOKENS, SUGGEST_MODEL, suggestCategories, suggestForGroups, type SuggestClient } from "./ai-suggest-server";
+import { MAX_GROUPS_PER_REQUEST } from "./ai-suggest";
+import {
+  MAX_BATCHES_PER_RUN,
+  SUGGEST_MAX_TOKENS,
+  SUGGEST_MODEL,
+  SUGGEST_ROW_LIMIT,
+  suggestCategories,
+  suggestForGroups,
+  type SuggestClient,
+} from "./ai-suggest-server";
+import { INBOX_LIMIT } from "./inbox";
 
 const { transactions, categories } = schema;
 
@@ -23,19 +33,30 @@ let oldCat: string;
 type Group = { key: string; direction: "in" | "out" };
 type Call = Parameters<SuggestClient["messages"]["parse"]>[0];
 
-/** Fake model: answers every group with a fixed kind-appropriate category (or per-test override). */
-function fake(over?: (groups: Group[], call: number) => unknown, stop = "end_turn") {
+const groupsOf = (call: Call): Group[] => {
+  const content = String((call.messages[0] as { content: string }).content);
+  return JSON.parse(content.slice(content.indexOf("{"))).groups;
+};
+const groupCount = (call: Call) => groupsOf(call).length;
+
+/**
+ * Fake model: answers every group with a fixed kind-appropriate category (or per-test override).
+ * `stop` is the stop_reason, or a function of the request's groups and the call number.
+ */
+function fake(
+  over?: (groups: Group[], call: number) => unknown,
+  stop: string | ((groups: Group[], call: number) => string) = "end_turn",
+) {
   const calls: Call[] = [];
   const client: SuggestClient = {
     messages: {
       parse: async (params) => {
         calls.push(params);
-        const content = String((params.messages[0] as { content: string }).content);
-        const groups: Group[] = JSON.parse(content.slice(content.indexOf("{"))).groups;
+        const groups = groupsOf(params);
         const parsed = over
           ? await over(groups, calls.length)
           : { suggestions: groups.map((g) => ({ key: g.key, categoryId: g.direction === "in" ? rent : supplies })) };
-        return { stop_reason: stop, parsed_output: parsed };
+        return { stop_reason: typeof stop === "function" ? stop(groups, calls.length) : stop, parsed_output: parsed };
       },
     },
   };
@@ -48,6 +69,15 @@ async function add(description: string, amountCents: number, extra: Partial<type
     .values({ date: "2026-10-01", amountCents, description, source: "csv", ...extra })
     .returning({ id: transactions.id });
   return r.id;
+}
+/** `n` one-off vendors with distinct patterns, all on the same date. */
+async function addVendors(n: number): Promise<string[]> {
+  const ids: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const w = `${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26))}`;
+    ids.push(await add(`VENDOR${w} SHOP`, -100 - i));
+  }
+  return ids;
 }
 const suggestionOf = async (id: string) =>
   (
@@ -111,6 +141,7 @@ describe("suggestCategories", () => {
     const p = calls[0] as unknown as Record<string, unknown>;
     expect(p.model).toBe("claude-haiku-5-5");
     expect(SUGGEST_MODEL).toBe("claude-haiku-5-5");
+    expect(SUGGEST_ROW_LIMIT).toBe(INBOX_LIMIT);
     expect(p.max_tokens).toBe(SUGGEST_MAX_TOKENS);
     expect((p.output_config as { effort: string }).effort).toBe("low");
     expect((p.output_config as { format: { type: string } }).format.type).toBe("json_schema");
@@ -151,20 +182,78 @@ describe("suggestCategories", () => {
     expect((await suggestionOf(a)).s).toBeNull();
   });
 
-  it("batches at 60 groups per request", async () => {
-    const ids: string[] = [];
-    for (let i = 0; i < 130; i++) {
-      const w = `${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26))}`;
-      ids.push(await add(`VENDOR${w} SHOP`, -100 - i));
-    }
+  it("batches at 16 groups per request, at most 8 requests a run; the next run picks up the rest", async () => {
+    await addVendors(130);
     const { client, calls } = fake();
     const r = await suggestCategories({ db, client });
-    expect(r).toEqual({ requested: 130, suggested: 130, batches: 3 });
-    const sizes = calls.map((c) => {
-      const t = String((c.messages[0] as { content: string }).content);
-      return JSON.parse(t.slice(t.indexOf("{"))).groups.length;
-    });
-    expect(sizes).toEqual([60, 60, 10]);
+    expect(MAX_GROUPS_PER_REQUEST).toBe(16);
+    expect(MAX_BATCHES_PER_RUN).toBe(8);
+    expect(r).toEqual({ requested: 130, suggested: 128, batches: 8 });
+    expect(calls.map(groupCount)).toEqual([16, 16, 16, 16, 16, 16, 16, 16]);
+    const next = fake();
+    expect(await suggestCategories({ db, client: next.client })).toEqual({ requested: 2, suggested: 2, batches: 1 });
+  });
+
+  it("splits a batch that hits max_tokens and retries the halves", async () => {
+    await addVendors(10);
+    const { client, calls } = fake(undefined, (groups) => (groups.length > 3 ? "max_tokens" : "end_turn"));
+    const r = await suggestCategories({ db, client });
+    expect(r).toEqual({ requested: 10, suggested: 10, batches: 7 });
+    expect(calls.map(groupCount)).toEqual([10, 5, 3, 2, 5, 3, 2]);
+  });
+
+  it("gives up on one group that never fits (marked asked), without blocking the rest", async () => {
+    // Newest row, so it lands in the first batch.
+    const poison = await add("POISON VENDOR", -999, { date: "2026-10-05" });
+    const ids = await addVendors(19);
+    const poisonKey = (groups: Group[]) => groups.some((g) => g.key === `row|${poison}`);
+    const { client, calls } = fake(undefined, (groups) => (poisonKey(groups) ? "max_tokens" : "end_turn"));
+    const r = await suggestCategories({ db, client });
+    // 16 -> 8 -> 4 -> 2 -> the poison alone (given up) -> its siblings 1, 2, 4: the 8-request cap.
+    expect(calls.map(groupCount)).toEqual([16, 8, 4, 2, 1, 1, 2, 4]);
+    expect(r).toMatchObject({ requested: 20, suggested: 7, batches: 8, error: "model_max_tokens" });
+    const p = await suggestionOf(poison);
+    expect(p.s).toBeNull();
+    expect(p.at).toBeInstanceOf(Date); // asked: not sent again
+    // The next run gets everything else in one request and never re-sends the poison group.
+    const next = fake();
+    expect(await suggestCategories({ db, client: next.client })).toMatchObject({ suggested: 12, batches: 1 });
+    expect(poisonKey(groupsOf(next.calls[0]))).toBe(false);
+    for (const id of ids) expect((await suggestionOf(id)).s).toBe(supplies);
+  });
+
+  it("skips a refused batch and carries on; the refused rows aren't sent again", async () => {
+    await addVendors(20);
+    const { client, calls } = fake(undefined, (_groups, call) => (call === 1 ? "refusal" : "end_turn"));
+    const r = await suggestCategories({ db, client });
+    expect(r).toEqual({ requested: 20, suggested: 4, batches: 2, error: "model_refusal" });
+    expect(calls.map(groupCount)).toEqual([16, 4]);
+    const next = fake();
+    expect(await suggestCategories({ db, client: next.client })).toEqual({ requested: 0, suggested: 0, batches: 0 });
+  });
+
+  it("stops after 2 failed batches in a row", async () => {
+    await addVendors(40);
+    const { client, calls } = fake(undefined, "refusal");
+    const r = await suggestCategories({ db, client });
+    expect(calls).toHaveLength(2);
+    expect(r).toMatchObject({ requested: 40, suggested: 0, batches: 2, error: "model_refusal" });
+  });
+
+  it("stops at the first API error (it would repeat for every batch)", async () => {
+    await addVendors(20);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let n = 0;
+    const client: SuggestClient = {
+      messages: {
+        parse: async () => {
+          n++;
+          throw Anthropic.APIError.generate(401, { type: "error", error: { type: "authentication_error", message: "x" } }, "x", new Headers());
+        },
+      },
+    };
+    expect(await suggestCategories({ db, client })).toMatchObject({ batches: 1, suggested: 0, error: "api_error_401" });
+    expect(n).toBe(1);
   });
 
   it("drops invalid model answers (wrong kind, archived, unknown)", async () => {
@@ -382,17 +471,28 @@ describe("suggestForGroups", () => {
     expect(JSON.stringify(spy.mock.calls)).not.toContain("SECRET");
   });
 
-  it("refusal and max_tokens write nothing and report an error", async () => {
+  it("a refusal or a lone group out of tokens is marked asked; several groups out of tokens write nothing", async () => {
     const a = await add("REFUSED VENDOR", -100);
+    const b = await add("RUNAWAY VENDOR", -100);
+    const c = await add("BIG BATCH ONE", -100);
+    const d = await add("BIG BATCH TWO", -200);
     expect(await suggestForGroups({ db, client: fake(undefined, "refusal").client, groups: [{ key: "a", ids: [a] }] })).toEqual({
       error: "model_refusal",
     });
-    expect(
-      await suggestForGroups({ db, client: fake(undefined, "max_tokens").client, groups: [{ key: "a", ids: [a] }] }),
-    ).toEqual({
+    expect(await suggestForGroups({ db, client: fake(undefined, "max_tokens").client, groups: [{ key: "b", ids: [b] }] })).toEqual({
       error: "model_max_tokens",
     });
-    expect(await suggestionOf(a)).toEqual({ s: null, at: null });
+    for (const id of [a, b]) {
+      const row = await suggestionOf(id);
+      expect(row.s).toBeNull();
+      expect(row.at).toBeInstanceOf(Date);
+    }
+    const two = [
+      { key: "c", ids: [c] },
+      { key: "d", ids: [d] },
+    ];
+    expect(await suggestForGroups({ db, client: fake(undefined, "max_tokens").client, groups: two })).toEqual({ error: "model_max_tokens" });
+    for (const id of [c, d]) expect(await suggestionOf(id)).toEqual({ s: null, at: null });
   });
 
   it("missing key (no injected client) writes nothing and returns { error }", async () => {

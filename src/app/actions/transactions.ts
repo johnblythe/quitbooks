@@ -12,6 +12,7 @@ import { chunk } from "@/lib/inbox";
 import { parseAmountToCents } from "@/lib/money";
 import { inInbox } from "@/lib/inbox-where";
 import { IN_ARRAY_CHUNK, applyRules, rememberPattern } from "@/lib/rules-server";
+import { FEED_EDIT_ERROR, SPLIT_EDIT_ERROR, deleteTransactionRow, updateTransactionRow } from "@/lib/transaction-guards";
 
 const { transactions } = schema;
 
@@ -83,31 +84,21 @@ export async function updateTransaction(_prev: TxFormState, formData: FormData):
   if ("error" in result) return { error: result.error };
   const { date, amountCents, description, note, categoryId, stylistId } = result.data;
 
-  const db = await getDb();
-  // A split row keeps its amount (the lines must keep adding up to it) and has no category of its own.
-  const [current] = await db
-    .select({ isSplit: transactions.isSplit, amountCents: transactions.amountCents })
-    .from(transactions)
-    .where(eq(transactions.id, id.data));
-  if (!current) return { error: "That transaction no longer exists." };
-  if (current.isSplit && current.amountCents !== amountCents) {
-    return { error: "This transaction is split, so its amount can't change. Remove the split first." };
-  }
-  const updated = await db
-    .update(transactions)
-    .set({ date, amountCents, description, note, ...(current.isSplit ? {} : { categoryId, stylistId }), updatedAt: new Date() })
-    .where(and(eq(transactions.id, id.data), eq(transactions.isSplit, current.isSplit)))
-    .returning({ id: transactions.id });
-  if (!updated.length) return { error: "This transaction changed while you were editing. Reload and try again." };
+  // A feed-linked row keeps its bank amount and date (see transaction-guards.ts).
+  const outcome = await updateTransactionRow(await getDb(), id.data, { date, amountCents, description, note, categoryId, stylistId });
+  if (outcome === "feed_linked") return { error: FEED_EDIT_ERROR };
+  if (outcome === "split_locked") return { error: SPLIT_EDIT_ERROR };
+  if (outcome === "missing") return { error: "That transaction was deleted." };
   redirect(`/transactions?month=${monthOf(date)}`);
 }
 
+/** Feed-linked rows are refused (see transaction-guards.ts); the edit page doesn't offer Delete for them. */
 export async function deleteTransaction(formData: FormData) {
   await requireUser();
   const id = z.uuid().parse(formData.get("id"));
   const month = String(formData.get("month") ?? "");
-  const db = await getDb();
-  await db.delete(transactions).where(eq(transactions.id, id));
+  if ((await deleteTransactionRow(await getDb(), id)) === "feed_linked") redirect(`/transactions/${id}`);
+  // Deleted, or already gone (a double submit or a stale tab): back to the month.
   redirect(month ? `/transactions?month=${month}` : "/transactions");
 }
 

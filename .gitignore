@@ -51,3 +51,6 @@ next-env.d.ts
 
 # vitest wrapper output
 .vitest/
+
+# scratch files for gh bodies
+tmp/

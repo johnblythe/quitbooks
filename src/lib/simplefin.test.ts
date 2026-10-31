@@ -4,7 +4,7 @@ import {
   assertSimplefinUrl,
   buildDescription,
   claimSetupToken,
-  collectErrors,
+  classifyErrors,
   decodeSetupToken,
   fetchAccountSet,
   mapAccount,
@@ -86,18 +86,60 @@ describe("claim and fetch (injected fetch)", () => {
   });
 });
 
-describe("redactSecrets / collectErrors", () => {
+describe("redactSecrets / classifyErrors", () => {
   it("strips credentials", () => {
     const s = redactSecrets("failed at https://user:pass@host.simplefin.org/x and http://a:b@c/d");
     expect(s).not.toContain("pass");
     expect(s).not.toContain("a:b");
     expect(s).toContain("https://[redacted]@host.simplefin.org/x");
   });
-  it("reads errlist and legacy errors", () => {
-    expect(collectErrors({ errlist: [{ code: "con.auth", msg: "Re-auth needed" }], errors: ["old https://u:p@x.simplefin.org"] })).toEqual([
-      "con.auth: Re-auth needed",
-      "old https://[redacted]@x.simplefin.org",
-    ]);
+  const accounts = [
+    { id: "ACT-1", name: "Checking", balance: "1", "balance-date": 1, conn_id: "CON-BMO" },
+    { id: "ACT-9", name: "Other bank", balance: "1", "balance-date": 1, conn_id: "CON-CHASE" },
+  ];
+  const ours = { accountIds: new Set(["ACT-1"]) };
+  it("fails on errors about our account or its connection", () => {
+    expect(
+      classifyErrors(
+        {
+          accounts,
+          errlist: [
+            { code: "con.auth", msg: "Re-auth needed", conn_id: "CON-BMO" },
+            { code: "act.stale", msg: "Stale", account_id: "ACT-1" },
+          ],
+        },
+        ours,
+      ),
+    ).toEqual({ errors: ["con.auth: Re-auth needed", "act.stale: Stale"], unattributed: [], others: [] });
+  });
+  it("separates other connections from errors that name nothing, redacted and not repeated", () => {
+    expect(
+      classifyErrors(
+        {
+          accounts,
+          errlist: [
+            { code: "con.auth", msg: "Chase needs you", conn_id: "CON-CHASE" },
+            { code: "act.x", msg: "Other", account_id: "ACT-9" },
+            { code: "gen.note", msg: "Heads up" },
+          ],
+          errors: ["Chase needs you", "old https://u:p@x.simplefin.org"],
+        },
+        ours,
+      ),
+    ).toEqual({
+      errors: [],
+      unattributed: ["gen.note: Heads up", "old https://[redacted]@x.simplefin.org"],
+      others: ["con.auth: Chase needs you", "act.x: Other"],
+    });
+  });
+  it("uses the stored conn_id when SimpleFIN leaves our account out", () => {
+    const set = { accounts: [], errlist: [{ code: "con.auth", msg: "Please re-authenticate", conn_id: "CON-BMO" }] };
+    expect(classifyErrors(set, ours).errors).toEqual([]);
+    expect(classifyErrors(set, { ...ours, connIds: new Set(["CON-BMO"]) })).toEqual({
+      errors: ["con.auth: Please re-authenticate"],
+      unattributed: [],
+      others: [],
+    });
   });
 });
 
@@ -165,5 +207,6 @@ describe("demo fixture (real SimpleFIN response)", () => {
     }
     const checking = fixture.accounts.find((a) => a.id === "Demo Checking")!;
     expect(mapAccount(checking, fixture).balanceCents).toBe(2448555);
+    expect(mapAccount(checking, fixture).connId).toBe("CON-SIMPLEFIN-DEMO");
   });
 });

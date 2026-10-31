@@ -1,5 +1,5 @@
 {
-  "id": "33593b11-7842-4082-99be-3b980abf8f29",
+  "id": "a395cd50-3a9b-423e-ad99-807ac92fc4f7",
   "prevId": "fe62e439-f8e4-49d5-868e-51363fb9a928",
   "version": "7",
   "dialect": "postgresql",
@@ -19,7 +19,7 @@
           "name": "connection_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "external_id": {
           "name": "external_id",
@@ -81,15 +81,9 @@
         }
       },
       "indexes": {
-        "bank_accounts_conn_ext_idx": {
-          "name": "bank_accounts_conn_ext_idx",
+        "bank_accounts_ext_idx": {
+          "name": "bank_accounts_ext_idx",
           "columns": [
-            {
-              "expression": "connection_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "external_id",
               "isExpression": false,
@@ -114,7 +108,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -166,6 +160,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "full_sync_pending": {
+          "name": "full_sync_pending",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "last_error": {
           "name": "last_error",
           "type": "text",
@@ -175,6 +176,12 @@
         "last_error_at": {
           "name": "last_error_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_warning": {
+          "name": "last_warning",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -722,130 +729,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.transaction_splits": {
-      "name": "transaction_splits",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "transaction_id": {
-          "name": "transaction_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "category_id": {
-          "name": "category_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stylist_id": {
-          "name": "stylist_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "amount_cents": {
-          "name": "amount_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "memo": {
-          "name": "memo",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "transaction_splits_transaction_idx": {
-          "name": "transaction_splits_transaction_idx",
-          "columns": [
-            {
-              "expression": "transaction_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "transaction_splits_transaction_id_transactions_id_fk": {
-          "name": "transaction_splits_transaction_id_transactions_id_fk",
-          "tableFrom": "transaction_splits",
-          "tableTo": "transactions",
-          "columnsFrom": [
-            "transaction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "transaction_splits_category_id_categories_id_fk": {
-          "name": "transaction_splits_category_id_categories_id_fk",
-          "tableFrom": "transaction_splits",
-          "tableTo": "categories",
-          "columnsFrom": [
-            "category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "transaction_splits_stylist_id_stylists_id_fk": {
-          "name": "transaction_splits_stylist_id_stylists_id_fk",
-          "tableFrom": "transaction_splits",
-          "tableTo": "stylists",
-          "columnsFrom": [
-            "stylist_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "transaction_splits_amount_nonzero": {
-          "name": "transaction_splits_amount_nonzero",
-          "value": "\"transaction_splits\".\"amount_cents\" <> 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.transactions": {
       "name": "transactions",
       "schema": "",
@@ -886,13 +769,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
-        },
-        "is_split": {
-          "name": "is_split",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "note": {
           "name": "note",
@@ -1129,12 +1005,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "transactions_split_parent_uncategorized": {
-          "name": "transactions_split_parent_uncategorized",
-          "value": "NOT \"transactions\".\"is_split\" OR (\"transactions\".\"category_id\" IS NULL AND \"transactions\".\"stylist_id\" IS NULL)"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.users": {

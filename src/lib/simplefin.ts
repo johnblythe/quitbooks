@@ -134,12 +134,36 @@ export async function fetchAccountSet(
   return json as SfAccountSet;
 }
 
-/** All error messages from a response (structured `errlist` and legacy `errors`), redacted. */
-export function collectErrors(set: Pick<SfAccountSet, "errors" | "errlist">): string[] {
-  const out: string[] = [];
-  for (const e of set.errlist ?? []) out.push(redactSecrets([e.code, e.msg].filter(Boolean).join(": ")));
-  for (const e of set.errors ?? []) if (typeof e === "string") out.push(redactSecrets(e));
-  return out.filter(Boolean);
+/**
+ * A response's error messages, redacted, in three groups:
+ * - `errors`: errlist entries naming one of our accounts or the bank login one of them is under
+ *   (`ours.connIds`, plus any conn_id SimpleFIN reports for our accounts in this response);
+ * - `unattributed`: errlist entries that name nothing, and legacy `errors` strings;
+ * - `others`: entries naming only other accounts or logins on the same Bridge account.
+ */
+export type ClassifiedErrors = { errors: string[]; unattributed: string[]; others: string[] };
+
+export function classifyErrors(
+  set: Pick<SfAccountSet, "accounts" | "errors" | "errlist">,
+  ours: { accountIds: ReadonlySet<string>; connIds?: ReadonlySet<string> },
+): ClassifiedErrors {
+  const connIds = new Set(ours.connIds ?? []);
+  for (const a of set.accounts) if (ours.accountIds.has(String(a.id)) && a.conn_id) connIds.add(String(a.conn_id));
+  const out: ClassifiedErrors = { errors: [], unattributed: [], others: [] };
+  for (const e of set.errlist ?? []) {
+    const msg = redactSecrets([e.code, e.msg].filter(Boolean).join(": "));
+    if (!msg) continue;
+    if (e.account_id == null && e.conn_id == null) out.unattributed.push(msg);
+    else if ((e.account_id != null && ours.accountIds.has(String(e.account_id))) || (e.conn_id != null && connIds.has(String(e.conn_id)))) out.errors.push(msg);
+    else out.others.push(msg);
+  }
+  for (const e of set.errors ?? []) {
+    if (typeof e !== "string" || !e) continue;
+    const msg = redactSecrets(e);
+    // The legacy list can repeat an errlist message; don't count it twice.
+    if (![...out.errors, ...out.unattributed, ...out.others].some((m) => m.includes(msg))) out.unattributed.push(msg);
+  }
+  return out;
 }
 
 // ---------- pure mapping ----------
@@ -153,6 +177,8 @@ export function unixToLocalDate(unix: number, timeZone: string = SALON_TZ): IsoD
 
 export type MappedAccount = {
   externalId: string;
+  /** SimpleFIN's bank-login id for the account, when the response includes it. */
+  connId: string | null;
   name: string;
   orgName: string;
   currency: string;
@@ -167,6 +193,7 @@ export function mapAccount(a: SfAccount, set?: Pick<SfAccountSet, "connections">
   const balanceCents = parseAmountToCents(a.balance);
   return {
     externalId: String(a.id),
+    connId: a.conn_id ? String(a.conn_id) : null,
     name: a.name,
     orgName: conn?.org_name ?? a.org?.name ?? conn?.name ?? "",
     currency: a.currency ?? "USD",

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { INBOX_LIMIT } from "./inbox";
 import { isSameOrigin, suggestGroupsInput } from "./suggest-request";
 
 const id = "123e4567-e89b-42d3-a456-426614174000";
@@ -13,7 +14,7 @@ describe("suggestGroupsInput", () => {
     ["empty key", [{ key: "", ids: [id] }]],
     ["key too long", [{ key: "x".repeat(201), ids: [id] }]],
     ["no ids", [{ key: "a", ids: [] }]],
-    ["501 ids", [{ key: "a", ids: Array.from({ length: 501 }, () => id) }]],
+    ["more ids than the Inbox holds", [{ key: "a", ids: Array.from({ length: INBOX_LIMIT + 1 }, () => id) }]],
     ["non-uuid id", [{ key: "a", ids: ["nope"] }]],
     ["not an array", { key: "a" }],
   ])("rejects %s", (_n, body) => expect(suggestGroupsInput.safeParse(body).success).toBe(false));
@@ -21,6 +22,10 @@ describe("suggestGroupsInput", () => {
   it("accepts the limits", () => {
     const groups = Array.from({ length: 12 }, (_, i) => ({ key: i ? `k${i}` : "x".repeat(200), ids: Array.from({ length: 500 }, () => id) }));
     expect(suggestGroupsInput.safeParse(groups).success).toBe(true);
+  });
+  it("accepts a group as big as the whole Inbox", () => {
+    expect(INBOX_LIMIT).toBe(2000);
+    expect(suggestGroupsInput.safeParse([{ key: "a", ids: Array.from({ length: INBOX_LIMIT }, () => id) }]).success).toBe(true);
   });
 });
 

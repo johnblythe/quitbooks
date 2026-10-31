@@ -1,6 +1,7 @@
 /**
- * Deletes transactions (and their split lines), import batches, rules, CSV mappings and stylists. Keeps users, categories
- * and settings. Requires --yes on any database.
+ * Deletes transactions (and split lines), import batches, rules, CSV mappings and stylists, and makes the bank feed's
+ * next sync re-fetch from its start date (so wiped feed rows come back). Keeps users, categories,
+ * settings and the bank link. Requires --yes on any database.
  * Usage: npm run db:wipe -- --yes
  */
 import { count } from "drizzle-orm";
@@ -27,6 +28,11 @@ async function main() {
     await db.delete(table);
     console.log(`Deleted ${n} ${label}`);
   }
+  const reset = await db
+    .update(schema.bankConnections)
+    .set({ fullSyncPending: true })
+    .returning({ id: schema.bankConnections.id });
+  console.log(`Bank feed: the next sync re-fetches from the start date (${reset.length} connection${reset.length === 1 ? "" : "s"})`);
   await close();
 }
 

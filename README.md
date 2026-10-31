@@ -54,6 +54,25 @@ After the first deploy: sign in, set chairs and the BMO opening balance in Setti
 
 ## Scripts
 
+### Rebuild disposable test books
+
+The committed `fixtures/bmo-fake-12mo-{single,split}.csv` files each contain 439 fake transactions;
+their `.truth.json` companions contain the roster, opening balance and expected answers.
+`fixtures/simplefin-demo.json` is a saved fake bank-feed response. None requires live bank access.
+
+After `db:migrate` and creating a test login, restore the default fixture with:
+
+```bash
+DATABASE_URL=pglite:./.pglite npm run fake:restore
+# Explicit opt-in for the disposable Neon dev database only:
+DATABASE_URL="$(neon connection-string dev --database-name quitbooks --role-name quitbooks_owner)" npm run fake:restore -- --yes
+```
+
+Restore uses the real CSV parser, duplicate detection and import writer. Running it twice does not
+duplicate transactions. It refuses books with bank-feed history and never wipes existing data.
+To clear bookkeeping data first, use `npm run db:wipe -- --yes` against your **local/dev** database,
+then run `fake:restore` again. Users and passwords survive the wipe. Never run either against production.
+
 | Script | What it does |
 | --- | --- |
 | `npm run dev` / `build` / `start` | Next.js |
@@ -63,7 +82,7 @@ After the first deploy: sign in, set chairs and the BMO opening balance in Setti
 | `npm run db:migrate` | Apply migrations (Neon or PGlite) |
 | `npm run db:seed` | Starter categories and settings (idempotent) |
 | `npm run db:demo` | Sample data, PGlite only |
-| `npm run db:wipe -- --yes` | Delete transactions, import batches, rules, CSV mappings and stylists (keeps users, categories, settings) |
+| `npm run db:wipe -- --yes` | Delete transactions, import batches, rules, CSV mappings and stylists, and make the bank feed's next sync re-fetch from its start date (keeps users, categories, settings and the bank link) |
 | `npm run fake:bmo` | Generate a fabricated BMO CSV plus a `.truth.json` (see flags in `scripts/fake-bmo-csv.ts`; committed samples live in `fixtures/`) |
 | `npm run fake:load -- <truth.json>` | Load the fake roster, chair count and opening balance (PGlite only unless `--yes`). Import the CSV through the app |
 | `npm run fake:score -- <csv> <truth.json>` | Score the importer and categorizer against a truth file |
