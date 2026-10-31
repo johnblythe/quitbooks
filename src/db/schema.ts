@@ -21,8 +21,23 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   passwordHash: text("password_hash").notNull(),
+  /** Bumped by `user:add` on an existing email; sessions carrying an older value are rejected. */
+  sessionVersion: integer("session_version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Failed (and, in principle, successful) logins, for rate limiting. Pruned after a day. */
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    ip: text("ip").notNull(),
+    ok: boolean("ok").notNull(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("login_attempts_email_at_idx").on(t.email, t.at), index("login_attempts_ip_at_idx").on(t.ip, t.at)],
+);
 
 export const categories = pgTable("categories", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -61,6 +76,71 @@ export const importBatches = pgTable("import_batches", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** A linked bank feed (SimpleFIN). The Access URL holds credentials, so it is stored encrypted. */
+export const bankConnections = pgTable("bank_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  provider: text("provider", { enum: ["simplefin"] }).notNull().default("simplefin"),
+  /** AES-256-GCM of the Access URL (see src/lib/bank-crypto.ts). Never returned to the client. */
+  accessUrlEnc: text("access_url_enc").notNull(),
+  label: text("label").notNull(),
+  /** Feed rows dated before this are ignored; CSV rows on/after it are skipped. */
+  cutoverDate: date("cutover_date").notNull(),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  /**
+   * The next sync fetches from cutoverDate instead of lastSyncedAt - 7 days. Set when the start date
+   * moves earlier, an account is added, or the books are wiped; cleared by a good sync.
+   */
+  fullSyncPending: boolean("full_sync_pending").notNull().default(false),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  /** SimpleFIN errors about other connections on the Bridge, from the last sync. Shown, but the sync still counts. */
+  lastWarning: text("last_warning"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const bankAccounts = pgTable(
+  "bank_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /**
+     * Null after a disconnect: the row is kept so feed transactions stay tied to it, and connecting
+     * the same SimpleFIN account again re-attaches it (by externalId) instead of importing twice.
+     */
+    connectionId: uuid("connection_id").references(() => bankConnections.id, { onDelete: "set null" }),
+    /** SimpleFIN's account id. One row per SimpleFIN account, whichever connection it's under. */
+    externalId: text("external_id").notNull(),
+    /**
+     * SimpleFIN's id for the bank login this account is under (`conn_id`), so an error about that
+     * login is recognized as ours even when SimpleFIN leaves the account out of the response.
+     */
+    connId: text("conn_id"),
+    name: text("name").notNull(),
+    orgName: text("org_name").notNull().default(""),
+    currency: text("currency").notNull().default("USD"),
+    balanceCents: integer("balance_cents"),
+    availableCents: integer("available_cents"),
+    balanceDate: timestamp("balance_date", { withTimezone: true }),
+    /** Only included accounts are synced. */
+    include: boolean("include").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("bank_accounts_ext_idx").on(t.externalId)],
+);
+
+/** One row per sync attempt (or account-list fetch), for debugging the feed and counting requests. */
+export const bankSyncRuns = pgTable("bank_sync_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  connectionId: uuid("connection_id").references(() => bankConnections.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  inserted: integer("inserted").notNull().default(0),
+  linked: integer("linked").notNull().default(0),
+  skipped: integer("skipped").notNull().default(0),
+  error: text("error"),
+  /** SimpleFIN requests this run made (or has reserved, while running). Feeds the daily request budget. */
+  requests: integer("requests").notNull().default(0),
+});
+
 export const transactions = pgTable(
   "transactions",
   {
@@ -77,6 +157,12 @@ export const transactions = pgTable(
     }),
     /** Stable fingerprint of an imported bank row; prevents double-importing the same CSV. */
     dedupeHash: text("dedupe_hash"),
+    /** Set on rows that came from (or were matched to) a bank feed transaction. */
+    bankAccountId: uuid("bank_account_id").references(() => bankAccounts.id, { onDelete: "set null" }),
+    externalId: text("external_id"),
+    /** AI-suggested category for an uncategorized row. Never applied automatically. */
+    suggestedCategoryId: uuid("suggested_category_id").references(() => categories.id, { onDelete: "set null" }),
+    suggestedAt: timestamp("suggested_at", { withTimezone: true }),
     createdBy: uuid("created_by").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -86,6 +172,7 @@ export const transactions = pgTable(
     index("transactions_category_idx").on(t.categoryId),
     index("transactions_stylist_idx").on(t.stylistId),
     uniqueIndex("transactions_dedupe_hash_idx").on(t.dedupeHash),
+    uniqueIndex("transactions_bank_ext_idx").on(t.bankAccountId, t.externalId),
   ],
 );
 
@@ -124,3 +211,5 @@ export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type Rule = typeof rules.$inferSelect;
 export type ImportBatch = typeof importBatches.$inferSelect;
+export type BankConnection = typeof bankConnections.$inferSelect;
+export type BankAccount = typeof bankAccounts.$inferSelect;

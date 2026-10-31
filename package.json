@@ -14,14 +14,21 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:demo": "tsx scripts/demo-data.ts",
-    "user:add": "tsx scripts/add-user.ts"
+    "db:wipe": "tsx scripts/db-wipe.ts",
+    "fake:bmo": "tsx scripts/fake-bmo-csv.ts",
+    "fake:load": "tsx scripts/fake-load.ts",
+    "fake:score": "tsx scripts/fake-score.ts",
+    "user:add": "tsx scripts/add-user.ts",
+    "bank:sync": "tsx --conditions=react-server scripts/bank-sync.ts"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.2.0",
+    "@anthropic-ai/sdk": "^1.3.0",
+    "@vercel/functions": "^3.10.3",
     "drizzle-orm": "^0.45.4",
     "jose": "^6.2.13",
     "next": "16.4.3",
     "papaparse": "^5.7.0",
+    "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
@@ -32,6 +39,7 @@
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^22.20.5",
     "@types/papaparse": "^5.5.2",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^18.0.9",
@@ -42,5 +50,10 @@
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "@vercel/cli-config": {
+      "zod": "$zod"
+    }
   }
 }

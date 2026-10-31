@@ -1,20 +1,33 @@
 import "server-only";
 import { connection } from "next/server";
 import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
-import { getDb, schema } from "@/db";
+import { getDb as openDb, schema } from "@/db";
 import { BOOTH_RENT_KEY, SETTING_KEYS, type OpeningBalance } from "@/db/defaults";
 import type { CsvMapping } from "./csv";
-import type { CategorizeInput } from "./categorize";
-import { categorize } from "./categorize";
+import { makeCategorizer } from "./categorizer";
+import { defaultCutover } from "./bank-status";
 import { monthEnd, monthStart, todayIso, type IsoDate, type MonthKey } from "./dates";
+import { INBOX_LIMIT } from "./inbox";
 import type { MetricTx } from "./metrics";
+import { bankAttention, type BankAttention } from "./bank-status";
+import { verifySession } from "./auth";
 
 /**
  * Data access layer. Every read awaits connection() so it runs at request time
  * (Cache Components would otherwise try to prerender it at build).
  */
 
-const { categories, stylists, transactions, rules, settings, csvMappings, importBatches } = schema;
+/**
+ * Every read below gets the database through this, so every page re-checks the session (the user
+ * exists and session_version still matches) and redirects to /login if it doesn't. The proxy only
+ * checks the cookie signature.
+ */
+async function getDb() {
+  await verifySession();
+  return openDb();
+}
+
+const { categories, stylists, transactions, rules, settings, csvMappings, importBatches, bankConnections, bankAccounts } = schema;
 
 export const BMO_MAPPING_NAME = "BMO";
 
@@ -79,8 +92,11 @@ const txSelect = {
   description: transactions.description,
   note: transactions.note,
   source: transactions.source,
+  externalId: transactions.externalId,
   categoryId: transactions.categoryId,
   stylistId: transactions.stylistId,
+  suggestedCategoryId: transactions.suggestedCategoryId,
+  suggestedAt: transactions.suggestedAt,
   categoryName: categories.name,
   categoryKind: categories.kind,
   stylistName: stylists.name,
@@ -111,6 +127,15 @@ export async function getUncategorized(limit = 100) {
     .where(isNull(transactions.categoryId))
     .orderBy(desc(transactions.date))
     .limit(limit);
+}
+
+/** Max rows the grouped Inbox loads at once (defined in inbox.ts so the suggest route can share it). */
+export { INBOX_LIMIT };
+
+/** Every uncategorized row for the grouped Inbox (capped), plus the true total. */
+export async function getInboxRows(limit = INBOX_LIMIT) {
+  const [rows, total] = await Promise.all([getUncategorized(limit), countUncategorized()]);
+  return { rows, total, capped: total > rows.length };
 }
 
 export async function countUncategorized(): Promise<number> {
@@ -179,18 +204,70 @@ export async function getRecentImports(limit = 5) {
 
 /** Everything the categorizer needs, loaded once per import or entry. */
 export async function getCategorizer() {
-  const db = await getDb();
-  const [allStylists, allRules, boothRentCategoryId] = await Promise.all([
-    db.select().from(stylists),
-    db.select().from(rules),
-    getBoothRentCategoryId(),
-  ]);
-  return (tx: CategorizeInput) =>
-    categorize(tx, { stylists: allStylists, rules: allRules, boothRentCategoryId });
+  return makeCategorizer(await getDb());
 }
 
-/** Today's date, computed per request (never baked in at build time). */
+/** Today's date, computed per request (never baked in at build time). Session-checked like the reads. */
 export async function requestToday() {
   await connection();
+  await verifySession();
   return todayIso();
+}
+
+/**
+ * The bank feed connection and its accounts. Deliberately selects no credential column:
+ * the encrypted Access URL never leaves the sync code.
+ */
+export async function getBankConnection() {
+  await connection();
+  const db = await getDb();
+  const [conn] = await db
+    .select({
+      id: bankConnections.id,
+      label: bankConnections.label,
+      cutoverDate: bankConnections.cutoverDate,
+      lastSyncedAt: bankConnections.lastSyncedAt,
+      lastError: bankConnections.lastError,
+      lastErrorAt: bankConnections.lastErrorAt,
+      lastWarning: bankConnections.lastWarning,
+      createdAt: bankConnections.createdAt,
+    })
+    .from(bankConnections)
+    .orderBy(asc(bankConnections.createdAt))
+    .limit(1);
+  if (!conn) return null;
+  const accounts = await db
+    .select({
+      id: bankAccounts.id,
+      name: bankAccounts.name,
+      orgName: bankAccounts.orgName,
+      balanceCents: bankAccounts.balanceCents,
+      availableCents: bankAccounts.availableCents,
+      balanceDate: bankAccounts.balanceDate,
+      include: bankAccounts.include,
+    })
+    .from(bankAccounts)
+    .where(eq(bankAccounts.connectionId, conn.id))
+    .orderBy(asc(bankAccounts.name));
+  return { ...conn, accounts, active: accounts.some((a) => a.include) };
+}
+
+export type BankConnectionView = NonNullable<Awaited<ReturnType<typeof getBankConnection>>>;
+
+/** Banner content when the feed needs attention (error, no good sync for 3+ days, or a SimpleFIN warning), else null. */
+export async function getBankAttention(): Promise<BankAttention | null> {
+  const c = await getBankConnection();
+  if (!c) return null;
+  return bankAttention(
+    { lastSyncedAt: c.lastSyncedAt, lastError: c.lastError, lastWarning: c.lastWarning, createdAt: c.createdAt, active: c.active },
+    new Date(),
+  );
+}
+
+/** Latest default start date suggestion for a new connection: day after the newest transaction, else 90 days ago. */
+export async function getDefaultBankCutover() {
+  const today = await requestToday();
+  const db = await getDb();
+  const [row] = await db.select({ d: transactions.date }).from(transactions).orderBy(desc(transactions.date)).limit(1);
+  return defaultCutover(row?.d ?? null, today);
 }

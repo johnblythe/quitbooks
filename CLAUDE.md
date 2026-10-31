@@ -31,26 +31,53 @@ Done:
 - Auth (2 users, scrypt + signed cookie), proxy guard
 - Dashboard: monthly profit + 6-month bars, booth rent expected vs collected, chairs filled, cash runway, expenses by category vs 3-month average
 - Transactions list by month, add, edit, delete
-- CSV import: header detection (single or debit/credit columns, preamble lines, sign inversion, memo column), editable mapping saved after first import, preview with duplicate flags and suggested categories, idempotent commit
-- Inbox: categorize, optional stylist, "remember" creates a rule and re-sorts the Inbox
-- Stylists: roster with weekly/biweekly/monthly rent, start/end dates, bank match text
-- Settings: chair count, opening balance, categories (add/rename/hide), rules
-- Reports: P&L for presets or custom range, summary CSV, detailed CSV, print / save as PDF
-- 52 unit tests across money, dates, CSV, categorization, metrics
+- CSV import:
+  - header detection (single or debit/credit columns, preamble lines, sign inversion, memo column);
+  - editable mapping, saved after the first import;
+  - preview with duplicate flags, suggested categories, and links to matching manual entries;
+  - atomic commit;
+  - mapping-independent dedupe hash;
+  - parse errors shown, and the import needs an acknowledgment when there are any.
+- Inbox:
+  - grouped by suggested merchant pattern: one pick sorts a group, and "remember" saves a rule;
+  - one-offs get per-row cards;
+  - Booth Rent + stylist remembers by extending the stylist's match text.
+- Categorization: stylist names match as whole words, only within the stylist's active window (14 days before start through 45 after end).
+- Stylists: roster with weekly/biweekly/monthly rent, start/end dates, bank match text.
+- Settings: chair count, opening balance, categories (add/rename/hide), rules (add/edit/delete with a live "Matches N past · M in Inbox" test).
+- Reports: P&L for presets or a custom range, summary CSV, detailed CSV, print / save as PDF.
+- Auth hardening: safe post-login redirect, login throttling (5 failures per IP / 20 per email in 15 min), session revocation via `users.session_version`, stronger scrypt, anchored proxy matcher, security headers.
+- Infra:
+  - Neon `quitbooks` with `production` and `dev` branches (see README "Deploy");
+  - node-postgres with `attachDatabasePool`;
+  - transactional migrations;
+  - Vercel project `drippy-projects/quitbooks`.
+- Fake data: `fake:bmo` / `fake:load` / `fake:score` / `db:wipe`, plus 12-month fixtures in `fixtures/`.
+- Bank sync (SimpleFIN Bridge): one-time link in Settings, daily Vercel Cron plus "Sync now", dedupe by bank transaction id, manual-entry linking, dashboard reconciliation line, connection-attention banner, CSV cutover guard, Access URL encrypted with AES-256-GCM.
+- AI category suggestions (Claude Haiku 5.5): lazy per group via `POST /api/inbox/suggest`, pre-fill the picker and are never auto-applied, precomputed after bank sync.
+- 339 unit tests. A browser click-through on the preview (against `dev`) passed for import, linking, Inbox, rules, headers and AI suggestions. **Not yet checked at 390 px wide** beyond John's eyeball ("good enough"): Chrome on macOS won't resize below 500 px, so use a phone or DevTools device mode.
 
-Next up, in priority order:
-1. **Get a real BMO CSV export** and check `detectMapping` against it, especially whether Zelle sender names appear in the description or a separate column (PRD open question). Add a fixture test with the real headers (fake the rows).
-2. **Deploy**: Vercel + Neon integration, run migrations and seed against Neon, create John's and Lauren's logins. Confirm the Neon HTTP driver works for every action (it has no interactive transactions; nothing currently needs one).
-3. **Inbox bulk actions**: select several rows → one category. "Remember" currently matches the suggested pattern; consider showing how many other Inbox items it would catch before saving.
-4. **Rule editing** (only add/delete today) and a "test this rule" preview.
-5. **Split a transaction** across categories (e.g. one Amazon order = supplies + cleaning).
-6. **Undo an import** (delete by `import_batch_id`) from the Recent imports list.
-7. **Login rate limiting** (e.g. a simple attempts table or Vercel KV) and a password change screen.
-8. **QuickBooks history**: decide how far back to import (open question). QuickBooks can export transactions to CSV; the importer may just work with a mapping.
-9. **PWA polish**: app icon, manifest, add-to-home-screen.
-10. Stretch: bank sync (Plaid / Teller / SimpleFIN, see PRD). Add a `bank_sync` source writer that reuses `categorize()` and the dedupe hash.
+Review findings (P0/P1/P2 with file:line): `docs/reviews/2026-10-24-logic.md`, `docs/reviews/2026-10-24-security.md`.
+
+Data is not precious yet: wiping and re-importing is fine until John says otherwise, so don't contort a fix to preserve existing rows.
+
+Next up, in order:
+1. **Real BMO link (John):** the $1.50 SimpleFIN test, ideally with a view-only BMO user. Confirm which BMO login the salon uses (Digital Banking or OLBB).
+2. **Go live**:
+   - merge `bank-sync` → `main` (deploys Production);
+   - production logins via `user:add` against the `production` Neon branch;
+   - link the real BMO on Production (not Preview);
+   - first sync and a reconciliation check;
+   - one guided Inbox session with Lauren.
+3. **Everything else**:
+   - undo an import (by `import_batch_id`);
+   - split a transaction;
+   - password change screen;
+   - QuickBooks history (CSV export through the importer, for dates before the feed starts);
+   - PWA polish;
+   - review P2s and product calls (runway vs owner draws, rent carry-forward, chair count).
 
 Known caveats:
 - Expected weekly/biweekly rent counts due dates from the stylist's start date; if real payment days differ, the month boundary can shift one payment between months. Fine for now; revisit if it confuses Lauren.
 - Cash runway needs an opening balance in Settings; balance = opening + everything recorded since that date.
-- `npm audit` reports advisories in dev-only tooling from the scaffold; review before deploy.
+- The test URL is the stable branch alias (e.g. `quitbooks-git-bank-sync-drippy-projects.vercel.app`), where John stays signed in. Don't hand out per-deploy URLs.

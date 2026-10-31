@@ -21,17 +21,36 @@ npm run dev
 
 ## Deploy (Vercel + Neon)
 
-1. Import this repo in Vercel: https://vercel.com/new
-2. In the Vercel project, add the Neon integration (Storage → Neon). It sets `DATABASE_URL`.
-3. Add `SESSION_SECRET` in Project Settings → Environment Variables (32+ random characters).
-4. From your machine, with `DATABASE_URL` pointed at Neon in `.env`:
-   ```bash
-   npm run db:migrate
-   npm run db:seed
-   npm run user:add -- john@… "John" "…"
-   npm run user:add -- lauren@… "Lauren" "…"
-   ```
-5. Deploy. Sign in, set chairs and the BMO opening balance in Settings, add stylists, then import a CSV.
+Live setup: Vercel project `drippy-projects/quitbooks`, Neon project `quitbooks` (`snowy-queen-68891538`, aws-us-east-1).
+
+| Neon branch | Used by | Data |
+| --- | --- | --- |
+| `production` | Vercel Production | Real books |
+| `dev` | Vercel Preview, local testing | Disposable; fake roster via `fake:load` |
+
+- Vercel env, Production and Preview each: `DATABASE_URL` (pooled, `-pooler` host) and `SESSION_SECRET` (separate random values).
+- Migrations use the **direct** connection (`DATABASE_URL_UNPOOLED`) and run in one transaction (`scripts/db.ts`).
+
+Run scripts against a branch without writing secrets to disk (needs `npm i -g neon` and `neon login`; the repo is linked via `.neon`):
+
+```bash
+cs() { neon connection-string "$1" --database-name quitbooks --role-name quitbooks_owner $2; }
+DATABASE_URL="$(cs dev --pooled)" DATABASE_URL_UNPOOLED="$(cs dev)" npm run db:migrate
+DATABASE_URL="$(cs dev --pooled)" npm run db:seed
+DATABASE_URL="$(cs production --pooled)" npm run user:add -- john@… "John" "…"
+```
+
+Run migrations on `dev` first, then `production`. Pushing to `main` deploys Production; any other branch gets a Preview against `dev`.
+
+After the first deploy: sign in, set chairs and the BMO opening balance in Settings, add stylists, then import a CSV.
+
+### Bank sync
+
+- Vercel env, Production and Preview: `BANK_TOKEN_KEY` (encrypts the stored SimpleFIN Access URL), `CRON_SECRET`, and `ANTHROPIC_API_KEY` (optional; enables AI category suggestions), plus the existing `DATABASE_URL` / `SESSION_SECRET`. See `.env.example`.
+- **Never rotate `BANK_TOKEN_KEY` casually.** The stored connection can't be decrypted with a new key, so you'd have to re-link.
+- To link: in SimpleFIN Bridge, create a setup token, paste it in Settings → Bank connection, then pick the account and a start date.
+- A Vercel Cron syncs daily at 11:00 UTC; "Sync now" in Settings runs it on demand. The cron is a no-op until a bank is linked.
+- Pending items: the feed only imports posted transactions.
 
 ## Scripts
 
@@ -44,6 +63,11 @@ npm run dev
 | `npm run db:migrate` | Apply migrations (Neon or PGlite) |
 | `npm run db:seed` | Starter categories and settings (idempotent) |
 | `npm run db:demo` | Sample data, PGlite only |
+| `npm run db:wipe -- --yes` | Delete transactions, import batches, rules, CSV mappings and stylists, and make the bank feed's next sync re-fetch from its start date (keeps users, categories, settings and the bank link) |
+| `npm run fake:bmo` | Generate a fabricated BMO CSV plus a `.truth.json` (see flags in `scripts/fake-bmo-csv.ts`; committed samples live in `fixtures/`) |
+| `npm run fake:load -- <truth.json>` | Load the fake roster, chair count and opening balance (PGlite only unless `--yes`). Import the CSV through the app |
+| `npm run fake:score -- <csv> <truth.json>` | Score the importer and categorizer against a truth file |
+| `npm run bank:sync` | Run a bank sync from the command line (same as the cron) |
 | `npm run user:add` | Create or reset a login |
 
 ## How it works

@@ -8,6 +8,7 @@ import { SETTING_KEYS } from "@/db/defaults";
 import { requireUser } from "@/lib/auth";
 import { isIsoDate } from "@/lib/dates";
 import { parseAmountToCents } from "@/lib/money";
+import { applyRules, testRuleMatches, type RuleTestResult } from "@/lib/rules-server";
 
 const { categories, rules, settings } = schema;
 
@@ -81,12 +82,44 @@ export async function addRule(formData: FormData) {
       pattern: z.string().trim().min(3).max(100),
       categoryId: z.uuid(),
       direction: z.enum(["any", "in", "out"]),
+      sortInbox: z.string().optional(),
     })
     .safeParse(Object.fromEntries(formData));
   if (!input.success) return;
+  const { sortInbox, ...values } = input.data;
   const db = await getDb();
-  await db.insert(rules).values(input.data);
+  await db.insert(rules).values(values);
+  if (sortInbox) await applyRules();
   refresh();
+}
+
+export async function updateRule(formData: FormData) {
+  await requireUser();
+  const input = z
+    .object({
+      id: z.uuid(),
+      pattern: z.string().trim().min(3).max(100),
+      categoryId: z.uuid(),
+      direction: z.enum(["any", "in", "out"]),
+      sortInbox: z.string().optional(),
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!input.success) return;
+  const { id, sortInbox, ...values } = input.data;
+  const db = await getDb();
+  await db.update(rules).set(values).where(eq(rules.id, id));
+  if (sortInbox) await applyRules();
+  refresh();
+}
+
+/** Live preview for the rule editor: what would this pattern match? */
+export async function testRule(pattern: string, direction: "any" | "in" | "out"): Promise<RuleTestResult> {
+  await requireUser();
+  const input = z
+    .object({ pattern: z.string().max(100), direction: z.enum(["any", "in", "out"]) })
+    .safeParse({ pattern, direction });
+  if (!input.success) return { matches: 0, inbox: 0, samples: [] };
+  return testRuleMatches(input.data.pattern, input.data.direction);
 }
 
 export async function deleteRule(formData: FormData) {

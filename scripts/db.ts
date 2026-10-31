@@ -1,8 +1,9 @@
 /** Shared DB setup for CLI scripts (migrate, seed, add-user, demo data). */
 import "dotenv/config";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 import * as schema from "../src/db/schema";
+import { withVerifyFull } from "../src/lib/pg-url";
 import type { Db } from "../src/db";
 
 export async function scriptDb(): Promise<{ db: Db; migrate: () => Promise<void>; close: () => Promise<void> }> {
@@ -22,7 +23,25 @@ export async function scriptDb(): Promise<{ db: Db; migrate: () => Promise<void>
     };
   }
 
-  const { migrate } = await import("drizzle-orm/neon-http/migrator");
-  const db = drizzle(neon(url), { schema });
-  return { db, migrate: () => migrate(db, { migrationsFolder: "./drizzle" }), close: async () => {} };
+  const pool = new Pool({ connectionString: withVerifyFull(url), max: 2 });
+  const db = drizzle(pool, { schema });
+  return {
+    db,
+    migrate: () => migrateNode(process.env.DATABASE_URL_UNPOOLED || url),
+    close: () => pool.end(),
+  };
+}
+
+/**
+ * Migrates over the direct (unpooled) URL when one is set. The node-postgres migrator runs all
+ * pending migrations in a single transaction, same as PGlite, so a failed run leaves nothing behind.
+ */
+async function migrateNode(url: string) {
+  const { migrate } = await import("drizzle-orm/node-postgres/migrator");
+  const pool = new Pool({ connectionString: withVerifyFull(url), max: 1 });
+  try {
+    await migrate(drizzle(pool, { schema }), { migrationsFolder: "./drizzle" });
+  } finally {
+    await pool.end();
+  }
 }

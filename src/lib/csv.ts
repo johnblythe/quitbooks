@@ -86,16 +86,33 @@ export function normalizeDescription(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
-function fingerprint(date: string, cents: number, description: string, occurrence: number): string {
-  const key = `${date}|${cents}|${normalizeDescription(description).toUpperCase()}|${occurrence}`;
-  return createHash("sha256").update(key).digest("hex").slice(0, 32);
+/**
+ * The identity of a bank row for dedupe: ISO date, amount as the bank wrote it (before any sign
+ * inversion) and the description column only (normalized, memo excluded). None of the options a user
+ * can edit in the mapping (memo column, sign inversion) feed into it, so re-importing with a changed
+ * mapping still dedupes.
+ */
+function identityKey(date: string, rawCents: number, descriptionColumn: string): string {
+  return `${date}|${rawCents}|${normalizeDescription(descriptionColumn).toUpperCase()}`;
 }
 
-function readAmount(record: Record<string, string>, mapping: CsvMapping): number | null {
+function fingerprint(key: string, occurrence: number): string {
+  return createHash("sha256").update(`${key}|${occurrence}`).digest("hex").slice(0, 32);
+}
+
+/**
+ * Reads the amount. `cents` is the signed value stored in the ledger; `rawCents` is the value as the
+ * bank wrote it, before `invertSign`. The dedupe hash uses `rawCents` so toggling the sign option
+ * doesn't change any hash.
+ */
+function readAmount(
+  record: Record<string, string>,
+  mapping: CsvMapping,
+): { cents: number; rawCents: number } | null {
   if (mapping.amountMode === "single") {
-    const cents = parseAmountToCents(record[mapping.amountColumn ?? ""]);
-    if (cents === null) return null;
-    return mapping.invertSign ? -cents : cents;
+    const raw = parseAmountToCents(record[mapping.amountColumn ?? ""]);
+    if (raw === null) return null;
+    return { cents: mapping.invertSign ? -raw : raw, rawCents: raw };
   }
   const debitRaw = record[mapping.debitColumn ?? ""]?.trim() ?? "";
   const creditRaw = record[mapping.creditColumn ?? ""]?.trim() ?? "";
@@ -104,7 +121,8 @@ function readAmount(record: Record<string, string>, mapping: CsvMapping): number
   if (debit === null || credit === null) return null;
   if (!debitRaw && !creditRaw) return null;
   // Debit = money out, regardless of whether the bank wrote it as positive or negative.
-  return Math.abs(credit) - Math.abs(debit);
+  const cents = Math.abs(credit) - Math.abs(debit);
+  return { cents, rawCents: cents };
 }
 
 /**
@@ -116,13 +134,27 @@ function readAmount(record: Record<string, string>, mapping: CsvMapping): number
  */
 export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvParseResult {
   // Some banks prepend account info lines before the real header; skip to the first line
-  // that looks like a header (has a comma and a date-ish column name).
+  // that is a header. Prefer a line whose cells map to date + description + amount columns, so a
+  // preamble line like "Activity date range: 10/01 to 10/31, all transactions" isn't mistaken for it.
+  // Fall back to the first line with a comma and "date" in it (unknown headers, mapped by hand).
   const lines = text.replace(/^﻿/, "").split(/\r?\n/);
-  let start = 0;
-  for (let i = 0; i < Math.min(lines.length, 15); i++) {
-    if (/date/i.test(lines[i]) && lines[i].includes(",")) {
+  const scan = Math.min(lines.length, 15);
+  let start = -1;
+  for (let i = 0; i < scan; i++) {
+    if (!lines[i].includes(",")) continue;
+    const cells = Papa.parse<string[]>(lines[i]).data[0] ?? [];
+    if (detectMapping(cells.map((c) => c.trim()))) {
       start = i;
       break;
+    }
+  }
+  if (start < 0) {
+    start = 0;
+    for (let i = 0; i < scan; i++) {
+      if (/date/i.test(lines[i]) && lines[i].includes(",")) {
+        start = i;
+        break;
+      }
     }
   }
   const body = lines.slice(start).join("\n");
@@ -153,21 +185,23 @@ export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvPars
       result.errors.push({ line, message: `Unrecognized date "${rawDate}"` });
       return;
     }
-    const amountCents = readAmount(record, effective);
-    if (amountCents === null) {
-      result.errors.push({ line, message: "Missing or unrecognized amount" });
+    const amount = readAmount(record, effective);
+    if (amount === null) {
+      result.errors.push({ line, message: "Missing, unrecognized or out-of-range amount" });
       return;
     }
+    const amountCents = amount.cents;
     if (amountCents === 0) {
       result.errors.push({ line, message: "Zero amount, skipped" });
       return;
     }
-    let description = normalizeDescription(record[effective.descriptionColumn] ?? "");
+    const descriptionCell = normalizeDescription(record[effective.descriptionColumn] ?? "");
+    let description = descriptionCell;
     const memo = effective.memoColumn ? normalizeDescription(record[effective.memoColumn] ?? "") : "";
     if (memo && !description.includes(memo)) description = description ? `${description} — ${memo}` : memo;
     if (!description) description = "(no description)";
 
-    const key = `${date}|${amountCents}|${description.toUpperCase()}`;
+    const key = identityKey(date, amount.rawCents, descriptionCell);
     const occurrence = seen.get(key) ?? 0;
     seen.set(key, occurrence + 1);
 
@@ -176,7 +210,7 @@ export function parseBankCsv(text: string, mapping?: CsvMapping | null): CsvPars
       date,
       amountCents,
       description,
-      dedupeHash: fingerprint(date, amountCents, description, occurrence),
+      dedupeHash: fingerprint(key, occurrence),
     });
   });
 

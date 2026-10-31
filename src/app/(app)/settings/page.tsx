@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { addCategory, addRule, deleteRule, renameCategory, toggleCategoryArchived } from "@/app/actions/settings";
+import { addCategory, renameCategory, toggleCategoryArchived } from "@/app/actions/settings";
 import { applyRulesToUncategorized } from "@/app/actions/transactions";
 import { Button, Card, Empty, PageHeader, Pill, Skeleton, cx, inputClass } from "@/components/ui";
-import { getCategories, getRules, getSettings } from "@/lib/data";
+import { getBankConnection, getCategories, getDefaultBankCutover, getRules, getSettings } from "@/lib/data";
+import { unixToLocalDate } from "@/lib/simplefin";
+import { ConnectForm, ConnectedView, SetupForm, type BankCardConnection } from "./bank-card";
 import { BusinessForm } from "./business-form";
+import { AddRuleForm, RuleRow } from "./rule-editor";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -22,13 +25,49 @@ export default function SettingsPage() {
 }
 
 async function SettingsContent() {
-  const [settings, categories, rules] = await Promise.all([getSettings(), getCategories({ includeArchived: true }), getRules()]);
+  const [settings, categories, rules, bank, defaultCutover] = await Promise.all([
+    getSettings(),
+    getCategories({ includeArchived: true }),
+    getRules(),
+    getBankConnection(),
+    getDefaultBankCutover(),
+  ]);
+  const bankView: BankCardConnection | null = bank && {
+    id: bank.id,
+    label: bank.label,
+    // A connection that hasn't been set up yet suggests the default start date; a finished one shows what it saved.
+    cutoverDate: bank.active ? bank.cutoverDate : defaultCutover,
+    lastSyncedAt: bank.lastSyncedAt
+      ? new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/Indiana/Indianapolis",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(bank.lastSyncedAt)
+      : null,
+    lastError: bank.lastError,
+    lastWarning: bank.lastWarning,
+    active: bank.active,
+    accounts: bank.accounts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      orgName: a.orgName,
+      balanceCents: a.balanceCents,
+      balanceDate: a.balanceDate ? unixToLocalDate(a.balanceDate.getTime() / 1000) : null,
+      include: a.include,
+    })),
+  };
   const active = categories.filter((c) => !c.archived);
 
   return (
     <div className="space-y-4">
       <Card title="The salon">
         <BusinessForm totalChairs={settings.totalChairs} opening={settings.openingBalance} />
+      </Card>
+
+      <Card title="Bank connection">
+        {!bankView ? <ConnectForm /> : bankView.active ? <ConnectedView conn={bankView} /> : <SetupForm conn={bankView} />}
       </Card>
 
       <Card
@@ -48,23 +87,11 @@ async function SettingsContent() {
         {rules.length ? (
           <ul className="mb-4 divide-y divide-line text-sm">
             {rules.map((r) => (
-              <li key={r.id} className="flex items-center justify-between gap-3 py-2">
-                <span className="min-w-0">
-                  <span className="font-mono text-xs">{r.pattern}</span>
-                  <span className="text-ink-2"> → {r.categoryName}</span>
-                  {r.direction !== "any" ? (
-                    <span className="ml-1">
-                      <Pill>{r.direction === "in" ? "money in" : "money out"}</Pill>
-                    </span>
-                  ) : null}
-                </span>
-                <form action={deleteRule}>
-                  <input type="hidden" name="id" value={r.id} />
-                  <button type="submit" className="text-xs text-bad" aria-label={`Delete rule ${r.pattern}`}>
-                    Remove
-                  </button>
-                </form>
-              </li>
+              <RuleRow
+                key={r.id}
+                rule={{ id: r.id, pattern: r.pattern, categoryId: r.categoryId, categoryName: r.categoryName, direction: r.direction }}
+                categories={active}
+              />
             ))}
           </ul>
         ) : (
@@ -72,33 +99,7 @@ async function SettingsContent() {
             <Empty>No rules yet. You can also create them from the Inbox.</Empty>
           </div>
         )}
-        <form action={addRule} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
-          <input name="pattern" required minLength={3} maxLength={100} placeholder="Text to match, e.g. SALLY BEAUTY" className={inputClass} aria-label="Text to match" />
-          <select name="categoryId" required defaultValue="" className={inputClass} aria-label="Category">
-            <option value="" disabled>
-              Category…
-            </option>
-            {(["expense", "income", "transfer"] as const).map((k) => (
-              <optgroup key={k} label={kindLabel[k]}>
-                {active
-                  .filter((c) => c.kind === k)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </select>
-          <select name="direction" defaultValue="any" className={inputClass} aria-label="Applies to">
-            <option value="any">In or out</option>
-            <option value="out">Money out</option>
-            <option value="in">Money in</option>
-          </select>
-          <Button type="submit" variant="secondary">
-            Add rule
-          </Button>
-        </form>
+        <AddRuleForm categories={active} />
       </Card>
 
       <Card title="Categories">
