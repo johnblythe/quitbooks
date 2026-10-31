@@ -4,6 +4,7 @@
 
 - Import mapping review: dated transactions whose payee starts with "Total" are never skipped as report totals; categories hidden after preview are rejected atomically; failed imports keep their file and choices for correction and retry.
 - A QuickBooks report that covers more than one account is now refused with an explanation, because every transfer would be counted twice. Export Transaction Detail by Account for the BMO account only.
+- Import category guessing matches whole words, so "ATM Withdrawal Fees", "Charitable Contributions", "Wire Transfer Fees" and "Cash Drawer Shortage" are no longer made transfers (which would drop them from the P&L).
 - Rebuilt the splits migration as 0006 after the reviewed bank-sync migrations.
 - Preserved bank amount/date/delete locks on split transactions, with atomic edit guards and regression tests.
 - Added `fake:restore`: reload the committed 439-row BMO fixture through the real importer, without duplicate transactions; documented the local/dev wipe-and-restore cycle.

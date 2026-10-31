@@ -51,6 +51,18 @@ describe("placeholders and kinds", () => {
     (v) => expect(looksLikeTransfer(v)).toBe(true),
   );
 
+  it.each(["Owner's Equity", "Member Distributions", "Draw"])("%s is a transfer", (v) =>
+    expect(guessKind(group(v, [-100]))).toBe("transfer"),
+  );
+
+  it.each(["ATM Withdrawal Fees", "Charitable Contributions", "Wire Transfer Fees", "Cash Drawer Shortage", "Rent Expense", "Booth Rent"])(
+    "%s is not a transfer",
+    (v) => {
+      expect(looksLikeTransfer(v)).toBe(false);
+      expect(guessKind(group(v, [-100]))).not.toBe("transfer");
+    },
+  );
+
   it("guesses transfer for equity names regardless of sign", () => {
     expect(guessKind(group("Owner's Draw", [-50000]))).toBe("transfer");
   });

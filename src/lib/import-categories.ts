@@ -46,11 +46,14 @@ export function isPlaceholderCategory(value: string): boolean {
   return k === "" || PLACEHOLDERS.has(k) || /^-+\s*split\s*-+$/.test(k);
 }
 
-const TRANSFERISH = /owner|draw|equity|contribution|distribution|transfer/i;
+// Whole words only: "ATM Withdrawal Fees" has "draw", "Charitable Contributions" has "contribution".
+const NOT_TRANSFER = /\b(fees?|charges?|charitable|shortage)\b/i;
+const TRANSFERISH =
+  /\b(owner'?s?|draws?|drawings|equity|distributions?)\b|\b(owner|capital|member)'?s? contributions?\b|\btransfers?\b/i;
 
 /** Owner equity and money moved between accounts aren't income or expense. */
 export function looksLikeTransfer(value: string): boolean {
-  return TRANSFERISH.test(value);
+  return !NOT_TRANSFER.test(value) && TRANSFERISH.test(value);
 }
 
 /** Distinct non-blank values with their row counts and net totals, most-used first. */
