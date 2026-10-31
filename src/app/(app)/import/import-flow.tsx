@@ -139,7 +139,7 @@ export function ImportFlow() {
         {result.errors.length ? (
           <div className="mt-3 rounded-lg border border-warn/40 p-3 text-sm" role="alert">
             <p className="font-medium text-warn">
-              {result.errors.length} rows couldn’t be read and were NOT imported
+              {result.errors.length} {result.errors.length === 1 ? "row" : "rows"} couldn’t be read and were NOT imported
             </p>
             <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-ink-2">
               {result.errors.map((e, i) => (
@@ -324,7 +324,7 @@ export function ImportFlow() {
             ) : null}
             {errorCount ? (
               <div className="mb-3 rounded-lg border border-warn/40 p-3 text-sm" role="alert">
-                <p className="font-medium text-warn">{errorCount} rows couldn’t be read</p>
+                <p className="font-medium text-warn">{errorCount} {errorCount === 1 ? "row" : "rows"} couldn’t be read</p>
                 <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-ink-2">
                   {preview.errors.slice(0, 100).map((e, i) => (
                     <li key={i}>
