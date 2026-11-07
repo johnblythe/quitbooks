@@ -205,7 +205,11 @@ export async function commitParsedImport(db: Db, input: CommitInput): Promise<Co
       .where(eq(importBatches.id, batch.id));
 
     // The remembered choices ride along with the column mapping, so the same layout pre-fills next time.
-    const mapping: CsvMapping = { ...input.mapping, categoryMap: input.mapping.categoryColumn ? saved : undefined };
+    // Merged with what is already stored (read inside this transaction), so importing a file with a
+    // different set of categories adds to the memory instead of replacing it.
+    const [stored] = await tx.select({ mapping: csvMappings.mapping }).from(csvMappings).where(eq(csvMappings.name, input.mappingName));
+    const categoryMap = input.mapping.categoryColumn ? mergeCategoryMap(stored?.mapping?.categoryMap, saved) : undefined;
+    const mapping: CsvMapping = { ...input.mapping, categoryMap };
     await tx
       .insert(csvMappings)
       .values({ name: input.mappingName, mapping })
@@ -214,6 +218,18 @@ export async function commitParsedImport(db: Db, input: CommitInput): Promise<Co
     const months = [...new Set(fresh.map((r) => r.date.slice(0, 7)))].sort();
     return { inserted, duplicates, linked, months, createdCategories: created };
   });
+}
+
+/** This import's choices win over what was stored; the newest `MAX_CHOICES` entries are kept. */
+export function mergeCategoryMap(
+  stored: Record<string, SavedCategoryChoice> | undefined,
+  saved: Record<string, SavedCategoryChoice>,
+): Record<string, SavedCategoryChoice> {
+  const merged: Record<string, SavedCategoryChoice> = {};
+  for (const [k, v] of Object.entries(stored ?? {})) if (!(k in saved)) merged[k] = v;
+  Object.assign(merged, saved);
+  const entries = Object.entries(merged);
+  return entries.length > MAX_CHOICES ? Object.fromEntries(entries.slice(entries.length - MAX_CHOICES)) : merged;
 }
 
 async function boothRentCategoryId(tx: Executor): Promise<string | null> {

@@ -32,6 +32,8 @@ export type CategoryGroup = {
   netCents: number;
   inCount: number;
   outCount: number;
+  /** Rows whose automatic categorization is Booth Rent with a stylist (the file may call it anything). */
+  stylistRentCount: number;
 };
 
 export type CategoryOption = { id: string; name: string; kind: CategoryKind; archived?: boolean };
@@ -64,18 +66,21 @@ export function looksLikeTransfer(value: string): boolean {
 }
 
 /** Distinct non-blank values with their row counts and net totals, most-used first. */
-export function summarizeFileCategories(rows: { category: string; amountCents: number }[]): CategoryGroup[] {
+export function summarizeFileCategories(
+  rows: { category: string; amountCents: number; stylistRent?: boolean }[],
+): CategoryGroup[] {
   const groups = new Map<string, CategoryGroup>();
   for (const r of rows) {
     const key = categoryKey(r.category);
     if (!key) continue;
     let g = groups.get(key);
     if (!g) {
-      g = { key, value: r.category.replace(/\s+/g, " ").trim(), count: 0, netCents: 0, inCount: 0, outCount: 0 };
+      g = { key, value: r.category.replace(/\s+/g, " ").trim(), count: 0, netCents: 0, inCount: 0, outCount: 0, stylistRentCount: 0 };
       groups.set(key, g);
     }
     g.count++;
     g.netCents += r.amountCents;
+    if (r.stylistRent) g.stylistRentCount++;
     if (r.amountCents > 0) g.inCount++;
     else if (r.amountCents < 0) g.outCount++;
   }
@@ -92,12 +97,14 @@ export function guessKind(g: Pick<CategoryGroup, "value" | "inCount" | "outCount
 /**
  * The starting choice for a value, in order: what was remembered from an earlier import (if that
  * category still exists), an exact case-insensitive name match, QuickBooks placeholders -> Inbox,
- * otherwise create it.
+ * Booth Rent when most of the rows already match a stylist's rent (QuickBooks may call it "Rental
+ * Income" or "Chair Rent"), otherwise create it.
  */
 export function defaultChoice(
   g: CategoryGroup,
   categories: CategoryOption[],
   saved?: Record<string, SavedCategoryChoice>,
+  boothRentId?: string | null,
 ): FileCategoryChoice {
   const remembered = saved?.[g.key];
   if (remembered?.type === "inbox") return remembered;
@@ -107,6 +114,9 @@ export function defaultChoice(
   const exact = categories.find((c) => !c.archived && categoryKey(c.name) === g.key);
   if (exact) return { type: "existing", categoryId: exact.id };
   if (isPlaceholderCategory(g.value)) return { type: "inbox" };
+  if (boothRentId && g.stylistRentCount * 2 > g.count && categories.some((c) => c.id === boothRentId && !c.archived)) {
+    return { type: "existing", categoryId: boothRentId };
+  }
   return { type: "new", name: g.value.slice(0, 60), kind: guessKind(g) };
 }
 
@@ -114,8 +124,9 @@ export function defaultChoices(
   groups: CategoryGroup[],
   categories: CategoryOption[],
   saved?: Record<string, SavedCategoryChoice>,
+  boothRentId?: string | null,
 ): Record<string, FileCategoryChoice> {
-  return Object.fromEntries(groups.map((g) => [g.key, defaultChoice(g, categories, saved)]));
+  return Object.fromEntries(groups.map((g) => [g.key, defaultChoice(g, categories, saved, boothRentId)]));
 }
 
 /**

@@ -91,6 +91,19 @@ describe("report furniture detection", () => {
     expect(p.skippedLines).toBe(0);
     expect(p.errors).toEqual([]);
   });
+  it("reports an undated Total-prefixed row that has an amount as a parse error (#5 P4-2)", () => {
+    const p = parseBankCsv("Name,Date,Amount\nTotal Beauty Supply,13/45/2026,-25.00\nTotal Wine,,-40.00\nShell,10/02/2026,-10.00\n");
+    expect(p.rows).toHaveLength(1);
+    expect(p.errors.map((e) => e.line)).toEqual([2, 3]);
+    expect(p.errors[0].message).toMatch(/date/i);
+    expect(p.skippedLines).toBe(0);
+  });
+  it("still skips Total rows with a figure when the label sits in the date column, and the Cash Basis footer", () => {
+    const p = parseBankCsv(`${header}\n10/01/2026,A,,Supplies,-5.00\nTotal for BMO,,,,-5.00\nTotal,,,,-5.00\nCash Basis Friday,,,,12.00\n`);
+    expect(p.rows).toHaveLength(1);
+    expect(p.errors).toEqual([]);
+    expect(p.skippedLines).toBe(3);
+  });
   it("skips TOTAL and Accrual Basis lines in any case, and rows with neither date nor amount", () => {
     const csv = [
       header,
