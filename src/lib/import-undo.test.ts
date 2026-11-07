@@ -3,7 +3,7 @@
  * undo paths end to end (what goes, what stays, refusals, and re-importing afterwards).
  */
 import { PGlite } from "@electric-sql/pglite";
-import { asc, count, desc, eq, sum } from "drizzle-orm";
+import { asc, count, desc, eq, sql, sum } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -47,13 +47,21 @@ describe("planImportUndo", () => {
   it("counts removed, touched and the net amount", () => {
     const rows = [
       row(), // untouched: updatedAt is the import's own timestamp
-      row({ amountCents: 25000, categoryId: "c" }),
+      row({ amountCents: 25000, categoryId: "c" }), // a category the import itself assigned: not touched
       row({ amountCents: -500, isSplit: true, updatedAt: new Date(at.getTime() + 60_000) }),
       row({ amountCents: -2500, updatedAt: new Date(at.getTime() + 1) }), // edited
     ];
     const plan = planImportUndo(batch, rows);
-    expect(plan).toMatchObject({ ok: true, filename: "qbo.csv", removed: 4, touched: 3, netCents: 21000 });
+    expect(plan).toMatchObject({ ok: true, filename: "qbo.csv", removed: 4, touched: 2, netCents: 21000 });
     expect(plan.ok && plan.ids).toEqual(rows.map((r) => r.id));
+  });
+
+  it("doesn't count a category or split flag the import set itself, only later changes", () => {
+    const rows = [row({ categoryId: "c" }), row({ categoryId: "c", isSplit: true })];
+    expect(planImportUndo(batch, rows)).toMatchObject({ ok: true, removed: 2, touched: 0 });
+    expect(planImportUndo(batch, [...rows, row({ categoryId: "c", updatedAt: new Date(at.getTime() + 1) })])).toMatchObject({
+      touched: 1,
+    });
   });
 
   it("refuses a missing or undone batch, and any feed-linked row", () => {
@@ -288,7 +296,7 @@ describe("undoImport on PGlite", () => {
         "10/03/2026,SPLIT LATER,500.00",
         "10/04/2026,UNTOUCHED,-1.23",
       ].join("\n"),
-      // A category at import time counts as sorted.
+      // A category at import time is the import's own doing, so it doesn't count as touched.
       { categorizer: (r) => ({ categoryId: r.description === "RULE HIT" ? supplies : null, stylistId: null }) },
     );
     await db
@@ -299,7 +307,7 @@ describe("undoImport on PGlite", () => {
     await saveSplit(db, toSplit.id, [L(sales, 40000), L(sales, 10000)]);
 
     const preview = await previewImportUndo(db, batch.id);
-    expect(preview).toEqual({ ok: true, filename: "preview.csv", removed: 4, touched: 3, netCents: 46877 });
+    expect(preview).toEqual({ ok: true, filename: "preview.csv", removed: 4, touched: 2, netCents: 46877 });
     expect(await totals()).toMatchObject({ transactions: 5, splits: 2 }); // preview changed nothing
 
     const before = await totals();
@@ -309,6 +317,64 @@ describe("undoImport on PGlite", () => {
     expect(ok(result).removed).toBe(before.transactions - after.transactions);
     expect(ok(result).netCents).toBe(before.net - after.net);
     expect(after).toEqual({ transactions: 1, net: -1234, splits: 0 });
+  });
+
+  it("counts an Inbox sort and a split as touched, but not categories the import assigned", async () => {
+    const { batch } = await commit(
+      "touched.csv",
+      ["Date,Description,Amount", "10/01/2026,MAPPED,-10.00", "10/02/2026,SORTED,-20.00", "10/03/2026,SPLIT,50.00", "10/04/2026,AS IMPORTED,-1.00"].join("\n"),
+      { categorizer: (r) => ({ categoryId: r.description === "MAPPED" ? supplies : null, stylistId: null }) },
+    );
+    expect(ok(await previewImportUndo(db, batch.id)).touched).toBe(0);
+
+    // The Inbox sort (src/app/actions/transactions.ts) and a split both set updated_at = new Date().
+    await db.update(transactions).set({ categoryId: supplies, updatedAt: new Date(batch.createdAt.getTime() + 5000) }).where(eq(transactions.description, "SORTED"));
+    const [toSplit] = await db.select().from(transactions).where(eq(transactions.description, "SPLIT"));
+    await db.update(transactions).set({ updatedAt: batch.createdAt }).where(eq(transactions.id, toSplit.id));
+    expect(await saveSplit(db, toSplit.id, [L(sales, 3000), L(sales, 2000)])).toMatchObject({ ok: true });
+    expect(ok(await previewImportUndo(db, batch.id)).touched).toBe(2);
+  });
+
+  it("rolls everything back when a row can't be deleted, leaving the batch un-undone", async () => {
+    const { batch } = await commit(
+      "race.csv",
+      ["Date,Description,Amount", "10/01/2026,ONE,-10.00", "10/02/2026,TWO,-20.00", "10/03/2026,THREE,-30.00"].join("\n"),
+    );
+    // A trigger that swallows one row's delete stands in for a row that changed under the undo.
+    await db.execute(sql`create function undo_skip_two() returns trigger language plpgsql as $$
+      begin if old.description = 'TWO' then return null; end if; return old; end $$`);
+    await db.execute(sql`create trigger undo_skip_two before delete on transactions for each row execute function undo_skip_two()`);
+    try {
+      const before = await db.select().from(transactions).orderBy(asc(transactions.id));
+      const result = await undoImport(db, batch.id, userId);
+      expect(result).toEqual({
+        ok: false,
+        error: "Some of these transactions changed while undoing. Nothing was changed; try again.",
+      });
+      expect(await db.select().from(transactions).orderBy(asc(transactions.id))).toEqual(before);
+      const [b] = await db.select().from(importBatches).where(eq(importBatches.id, batch.id));
+      expect(b.undoneAt).toBeNull();
+      expect(b.undoneBy).toBeNull();
+    } finally {
+      await db.execute(sql`drop trigger undo_skip_two on transactions`);
+      await db.execute(sql`drop function undo_skip_two()`);
+    }
+    // With the obstacle gone the same undo goes through.
+    expect(await undoImport(db, batch.id, userId)).toMatchObject({ ok: true, removed: 3 });
+  });
+
+  it("removes every row of a batch larger than one delete chunk (500)", async () => {
+    const n = 1203;
+    const lines = Array.from({ length: n }, (_, i) => `10/01/2026,ROW ${i},-${(i % 90) + 1}.00`);
+    const { batch, out } = await commit("big.csv", ["Date,Description,Amount", ...lines].join("\n"));
+    expect(out.inserted).toBe(n);
+    await db.insert(transactions).values({ date: "2026-09-01", amountCents: 100, description: "Typed in", source: "manual" });
+
+    expect(ok(await previewImportUndo(db, batch.id)).removed).toBe(n);
+    expect(await undoImport(db, batch.id, userId)).toMatchObject({ ok: true, removed: n });
+    expect((await totals()).transactions).toBe(1);
+    const [b] = await db.select().from(importBatches).where(eq(importBatches.id, batch.id));
+    expect(b.undoneAt).toBeInstanceOf(Date);
   });
 
   function L(categoryId: string, amountCents: number) {

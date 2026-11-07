@@ -28,8 +28,9 @@ export async function undoImportAction(batchId: string): Promise<UndoImportState
   const id = z.uuid().safeParse(batchId);
   if (!id.success) return { ok: false, message: BAD_ID };
   const result = await undoImport(await getDb(), id.data, user.userId);
-  if (!result.ok) return { ok: false, message: result.error };
+  // Refresh on a refusal too: "already undone" / "gone" means the row's Undo button is stale.
   refresh();
+  if (!result.ok) return { ok: false, message: result.error };
   return {
     ok: true,
     message: result.removed

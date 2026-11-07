@@ -10,6 +10,11 @@
   - refused, with nothing changed, when the batch was already undone or any of its rows is matched to the bank feed;
   - re-importing the same file afterwards brings its rows back;
   - migration `0007` adds `import_batches.undone_at` and `undone_by`.
+  - review follow-ups (#9):
+    - the confirmation counts only transactions sorted, split or edited since the import, so categories the import assigned itself no longer make it read "N of N";
+    - an undo that is refused because the import was already undone elsewhere, or no longer exists, now refreshes the list, so the stale Undo button goes away;
+    - after Cancel focus returns to the Undo button, and after an undo it moves to the result message; the result region is always present so screen readers announce it;
+    - more tests: the rollback when a row can't be deleted, imports over 500 rows, and the undo server actions.
 - `npm run qbo:compare`: a read-only check of our cash-basis P&L against a QuickBooks Online "Profit and Loss by Month" CSV export (#8).
   - It compares month by month and category by category, and lists the QuickBooks accounts and our transactions (date, amount, description, source) behind every cell that differs.
   - It also shows the Inbox totals per month, the account mapping (`--map` override, then the import's saved choices, then the same name, then QuickBooks placeholders to the Inbox), and unmapped accounts on both sides.

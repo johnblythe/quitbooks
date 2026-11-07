@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { previewImportUndoAction, undoImportAction, type UndoImportState } from "@/app/actions/import-undo";
 import { Button, ErrorText, Pill } from "@/components/ui";
 import type { UndoCounts } from "@/lib/import-undo";
@@ -37,7 +37,7 @@ function ConfirmText({ counts }: { counts: UndoCounts }) {
       Remove {plural(counts.removed)} ({formatCents(counts.netCents, { signed: true })} net) from{" "}
       <strong className="break-all">{counts.filename}</strong>?{" "}
       {counts.touched
-        ? `${counts.touched} of them ${counts.touched === 1 ? "has" : "have"} been sorted, split or edited. `
+        ? `${counts.touched} of them ${counts.touched === 1 ? "has" : "have"} been sorted, split or edited since the import. `
         : ""}
       Entries you typed in that it matched, bank-feed rows and categories it created are kept. This can&apos;t be
       reversed.
@@ -50,6 +50,17 @@ export function RecentImportRow({ batch }: { batch: RecentImport }) {
   const [confirm, setConfirm] = useState<UndoCounts | null>(null);
   const [status, setStatus] = useState<UndoImportState | null>(null);
   const [pending, startTransition] = useTransition();
+  const undoButton = useRef<HTMLButtonElement>(null);
+  const statusRegion = useRef<HTMLDivElement>(null);
+  // Where focus goes once the panel has closed: the panel's buttons unmount, which would drop it to <body>.
+  const focusNext = useRef<"undo" | "status" | null>(null);
+
+  useEffect(() => {
+    if (confirm) return;
+    const target = focusNext.current === "undo" ? undoButton.current : focusNext.current === "status" ? statusRegion.current : null;
+    focusNext.current = null;
+    target?.focus();
+  }, [confirm, status]);
 
   function askUndo() {
     setStatus(null);
@@ -65,6 +76,7 @@ export function RecentImportRow({ batch }: { batch: RecentImport }) {
   }
 
   function runUndo() {
+    focusNext.current = "status";
     startTransition(async () => {
       try {
         setStatus(await undoImportAction(batch.id));
@@ -73,6 +85,11 @@ export function RecentImportRow({ batch }: { batch: RecentImport }) {
       }
       setConfirm(null);
     });
+  }
+
+  function cancel() {
+    focusNext.current = "undo";
+    setConfirm(null);
   }
 
   return (
@@ -85,6 +102,7 @@ export function RecentImportRow({ batch }: { batch: RecentImport }) {
             <Pill>Undone {batch.undoneOn}</Pill>
           ) : confirm ? null : (
             <button
+              ref={undoButton}
               type="button"
               onClick={askUndo}
               disabled={pending}
@@ -108,17 +126,17 @@ export function RecentImportRow({ batch }: { batch: RecentImport }) {
             <Button type="button" variant="danger" className="min-h-10" onClick={runUndo} disabled={pending}>
               {pending ? "Removing…" : confirm.removed ? `Remove ${plural(confirm.removed)}` : "Mark as undone"}
             </Button>
-            <Button type="button" variant="ghost" className="min-h-10" onClick={() => setConfirm(null)} disabled={pending}>
+            <Button type="button" variant="ghost" className="min-h-10" onClick={cancel} disabled={pending}>
               Cancel
             </Button>
           </div>
         </div>
       ) : null}
-      {status ? (
-        <div className="mt-2" aria-live="polite">
-          {status.ok ? <p className="text-sm text-good">{status.message}</p> : <ErrorText>{status.message}</ErrorText>}
-        </div>
-      ) : null}
+      <div ref={statusRegion} tabIndex={-1} className={`focus:outline-none${status ? " mt-2" : ""}`} aria-live="polite">
+        {status ? (
+          status.ok ? <p className="text-sm text-good">{status.message}</p> : <ErrorText>{status.message}</ErrorText>
+        ) : null}
+      </div>
     </li>
   );
 }

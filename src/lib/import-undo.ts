@@ -32,7 +32,7 @@ export type UndoCounts = {
   filename: string;
   /** Transactions the undo deletes. */
   removed: number;
-  /** Of those, how many have a category, are split, or were edited after the import. */
+  /** Of those, how many were sorted, split or edited after the import (`updated_at` moved past it). */
   touched: number;
   /** Sum of the removed amounts, in cents (signed: positive = money in). */
   netCents: number;
@@ -52,7 +52,8 @@ export function feedLinkedError(n: number): string {
 /**
  * Decides what an undo would do, from the batch and its csv rows. Pure, so the preview and the
  * undo can't disagree. A row inserted by the import has `updatedAt` equal to the batch's
- * `createdAt` (both are the import transaction's `now()`); any later edit bumps `updatedAt`.
+ * `createdAt` (both are the import transaction's `now()`); every later write (Inbox sort, rule
+ * apply, split/unsplit, edit) bumps `updatedAt`. A category the import itself assigned doesn't count.
  */
 export function planImportUndo(batch: UndoBatch | undefined, rows: UndoRow[]): UndoPlan {
   if (!batch) return { ok: false, error: UNDO_MISSING };
@@ -65,7 +66,7 @@ export function planImportUndo(batch: UndoBatch | undefined, rows: UndoRow[]): U
     filename: batch.filename,
     ids: rows.map((r) => r.id),
     removed: rows.length,
-    touched: rows.filter((r) => r.categoryId !== null || r.isSplit || r.updatedAt.getTime() > since).length,
+    touched: rows.filter((r) => r.updatedAt.getTime() > since).length,
     netCents: rows.reduce((sum, r) => sum + r.amountCents, 0),
   };
 }
