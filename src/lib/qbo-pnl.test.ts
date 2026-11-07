@@ -398,6 +398,10 @@ describe("parseQboPnl: money it can't place fails the run, with the line", () =>
     expect(() => parseQboPnl(report([...body, "Net Income,10.00,20.00,30.00", "Stray,5.00,,5.00"]))).toThrow(/Line 10: "Stray" has amounts but isn't under Income/);
     // Not a real day or weekday: not a date stamp.
     expect(() => parseQboPnl(report([...body, "Net Income,10.00,20.00,30.00", "Someday, November 7, 2026"]))).toThrow(/Line 10/);
+    // Inside a section (even one opened after Net Income), a date-stamp line is never skipped.
+    expect(() =>
+      parseQboPnl(report([...body, "Net Income,10.00,20.00,30.00", "Expenses", "Saturday, November 7, 2026", "Total Expenses,0.00,0.00,0.00"])),
+    ).toThrow(/Line 11: "November 7" under Jan 2026 isn't an amount/);
   });
 
   it("says what's wrong with text in a column that has no heading", () => {
