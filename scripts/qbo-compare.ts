@@ -13,12 +13,14 @@
  *   DATABASE_URL="$(cs production --pooled)" npm run qbo:compare -- pnl.csv --to 2026-09
  *
  * --map is a JSON object {"QuickBooks account": "Our category"}; "Inbox" means uncategorized.
- * Exit code 0 when every cell matches (within --tolerance-cents), 1 otherwise.
+ * Exit code 0 only on MATCH: every cell and every month total within --tolerance-cents, and no
+ * problems in the QuickBooks file (its own totals add up). 1 otherwise, including any error.
+ * The report header names the database that was read (host and database name, never credentials).
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import { scriptDb } from "./db";
-import { parseCompareArgs, QboCompareInputError } from "../src/lib/qbo-compare";
+import { describeDatabase, parseCompareArgs, QboCompareInputError } from "../src/lib/qbo-compare";
 import { runQboCompare } from "../src/lib/qbo-compare-db";
 import { QboPnlParseError } from "../src/lib/qbo-pnl";
 
@@ -35,10 +37,14 @@ async function main(): Promise<number> {
   }
 
   const { db, close } = await scriptDb();
+  // After scriptDb, so a DATABASE_URL loaded from .env is the one described.
+  const database = describeDatabase(process.env.DATABASE_URL);
+  console.error(`Reading our books from ${database} (read only)`);
   try {
     const run = await runQboCompare(db, {
       csvText,
       fileName: basename(args.file),
+      database,
       from: args.from,
       to: args.to,
       toleranceCents: args.toleranceCents,
@@ -55,11 +61,15 @@ async function main(): Promise<number> {
   }
 }
 
+// exitCode, not process.exit(): exiting at once can cut off a piped report (verdict line included)
+// while stdout is still flushing. The pool is closed above, so the process ends on its own.
 main().then(
-  (code) => process.exit(code),
+  (code) => {
+    process.exitCode = code;
+  },
   (e: unknown) => {
     const known = e instanceof QboCompareInputError || e instanceof QboPnlParseError;
     console.error(known ? (e as Error).message : e);
-    process.exit(1);
+    process.exitCode = 1;
   },
 );

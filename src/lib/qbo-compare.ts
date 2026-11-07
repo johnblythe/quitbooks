@@ -12,7 +12,7 @@ import { categoryKey, isPlaceholderCategory, type CategoryKind } from "./import-
 import { toMetricTxs, type LedgerLine, type LedgerSplit, type LedgerTx } from "./ledger";
 import { computePnl, UNCATEGORIZED_IN, UNCATEGORIZED_OUT } from "./metrics";
 import { formatCents } from "./money";
-import { SECTION_LABEL, sectionDirection, type QboAccount, type QboColumn, type QboPnl, type QboSection } from "./qbo-pnl";
+import { SECTION_LABEL, sectionDirection, type QboAccount, type QboColumn, type QboPnl, type QboProblem, type QboSection } from "./qbo-pnl";
 
 export type OurCategory = { id: string; name: string; kind: CategoryKind; archived: boolean };
 export type OurTx = LedgerTx & { description: string; source: "manual" | "csv" | "bank_sync" };
@@ -181,8 +181,23 @@ export type Cell = {
 export type MonthTotals = {
   month: MonthKey;
   column: QboColumn;
-  qbo: { income: number; expenses: number; net: number };
+  /**
+   * Income and expenses add up the file's accounts. `net` is the file's own Net Income row
+   * (`netReported`), falling back to the recomputed net only when the file has none (which is a
+   * blocking problem by itself).
+   */
+  qbo: { income: number; expenses: number; net: number; netReported: number | null; netComputed: number };
   ours: { income: number; expenses: number; net: number };
+  /**
+   * Income, expenses or net differ by more than the tolerance.
+   * - "ok": all three are within it.
+   * - "cells": off, and this month's mismatched cells show where.
+   * - "mismatch": off with no mismatched cell to show for it (e.g. small cell differences adding up,
+   *   or the file's Net Income row disagreeing with its accounts). Counts as a mismatch.
+   */
+  status: "ok" | "cells" | "mismatch";
+  /** The biggest of the three differences (ours − QuickBooks) that is over the tolerance, or 0. */
+  diff: number;
 };
 
 export type InboxMonth = { month: MonthKey; column: QboColumn; inCents: number; inCount: number; outCents: number; outCount: number };
@@ -192,8 +207,18 @@ export type CompareResult = {
   toleranceCents: number;
   months: MonthTotals[];
   cells: Cell[];
+  /** Cells that differ by more than the tolerance. */
   mismatches: Cell[];
+  /** Cells that differ, but by no more than the tolerance. Always reported, never hidden. */
+  withinTolerance: Cell[];
+  /** Months whose totals are off with no mismatched cell to explain it (status "mismatch"). */
+  monthMismatches: MonthTotals[];
+  /** The QuickBooks file disagrees with itself or can't be trusted. Each one blocks MATCH. */
+  problems: QboProblem[];
+  /** |diff| summed over mismatched cells and month mismatches. */
   totalAbsDiff: number;
+  /** True only when nothing differs beyond the tolerance and the file has no problems. */
+  match: boolean;
   inbox: InboxMonth[];
   mappings: AccountMapping[];
   /** Mapped accounts with money in range whose target is a transfer category (left out of our P&L). */
@@ -233,6 +258,7 @@ export function compareBooks(input: {
   const months: MonthTotals[] = [];
   const inbox: InboxMonth[] = [];
   const ourCategoryTotals = new Map<string, number>();
+  const netIncomeRow = pnl.checks.find((c) => c.name === "Net Income");
 
   for (const column of pnl.columns) {
     const { month } = column;
@@ -290,11 +316,15 @@ export function compareBooks(input: {
       c.diff = c.ours - c.qbo;
       cells.push(c);
     }
+    const reported = netIncomeRow ? netIncomeRow.cents[month] ?? 0 : null;
+    const computedNet = qboIncome - qboExpenses;
     months.push({
       month,
       column,
-      qbo: { income: qboIncome, expenses: qboExpenses, net: qboIncome - qboExpenses },
+      qbo: { income: qboIncome, expenses: qboExpenses, net: reported ?? computedNet, netReported: reported, netComputed: computedNet },
       ours: { income: ours.totalIncome, expenses: ours.totalExpenses, net: ours.net },
+      status: "ok",
+      diff: 0,
     });
 
     const inRange = lines.filter((l) => l.date >= column.from && l.date <= column.to);
@@ -311,12 +341,24 @@ export function compareBooks(input: {
     });
   }
 
-  const mismatches = cells.filter((c) => Math.abs(c.diff) > tolerance);
-  for (const c of mismatches) c.lines = linesInCell(lines, c);
   const kindOrder: Record<CategoryKind, number> = { income: 0, expense: 1, transfer: 2 };
-  mismatches.sort(
-    (a, b) => a.month.localeCompare(b.month) || kindOrder[a.kind] - kindOrder[b.kind] || Math.abs(b.diff) - Math.abs(a.diff) || a.label.localeCompare(b.label),
-  );
+  const byMonthThenSize = (a: Cell, b: Cell) =>
+    a.month.localeCompare(b.month) || kindOrder[a.kind] - kindOrder[b.kind] || Math.abs(b.diff) - Math.abs(a.diff) || a.label.localeCompare(b.label);
+  const mismatches = cells.filter((c) => Math.abs(c.diff) > tolerance).sort(byMonthThenSize);
+  const withinTolerance = cells.filter((c) => c.diff !== 0 && Math.abs(c.diff) <= tolerance).sort(byMonthThenSize);
+  for (const c of [...mismatches, ...withinTolerance]) c.lines = linesInCell(lines, c);
+
+  // Month totals get the same tolerance, so small cell differences can't add up unseen, and the net
+  // is checked against the file's own Net Income row, so money the parser lost can't hide.
+  for (const m of months) {
+    const diffs = [m.ours.net - m.qbo.net, m.ours.income - m.qbo.income, m.ours.expenses - m.qbo.expenses];
+    const over = diffs.find((d) => Math.abs(d) > tolerance);
+    if (over === undefined) continue;
+    m.diff = over;
+    m.status = mismatches.some((c) => c.month === m.month) ? "cells" : "mismatch";
+  }
+  const monthMismatches = months.filter((m) => m.status === "mismatch");
+  const problems = [...pnl.problems];
 
   const hasMoney = (m: AccountMapping) => pnl.columns.some((col) => (m.account.cents[col.month] ?? 0) !== 0);
   const targeted = new Set(mappings.flatMap((m) => (m.target?.type === "category" ? [m.target.categoryId] : [])));
@@ -333,7 +375,11 @@ export function compareBooks(input: {
     months,
     cells,
     mismatches,
-    totalAbsDiff: mismatches.reduce((s, c) => s + Math.abs(c.diff), 0),
+    withinTolerance,
+    monthMismatches,
+    problems,
+    totalAbsDiff: mismatches.reduce((s, c) => s + Math.abs(c.diff), 0) + monthMismatches.reduce((s, m) => s + Math.abs(m.diff), 0),
+    match: !mismatches.length && !monthMismatches.length && !problems.length,
     inbox,
     mappings,
     toTransfers: mappings.filter((m) => m.target?.type === "category" && byId.get(m.target.categoryId)?.kind === "transfer" && hasMoney(m)),
@@ -365,24 +411,72 @@ const signed = (c: number) => (c === 0 ? "0" : formatCents(c, { signed: true }))
 const md = (s: string) => s.replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
 const MAX_LINES_PER_CELL = 50;
 
-export function mismatchSummary(r: Pick<CompareResult, "mismatches" | "totalAbsDiff">): string {
-  if (!r.mismatches.length) return "MATCH";
-  const n = r.mismatches.length;
-  return `${n} ${n === 1 ? "mismatch" : "mismatches"}, total abs diff ${money(r.totalAbsDiff)}`;
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The last line of the report. MATCH only when every cell and every month total agree within the
+ * tolerance and the QuickBooks file has no problems; it names the months it covers.
+ */
+export function mismatchSummary(
+  r: Pick<CompareResult, "columns" | "mismatches" | "withinTolerance" | "monthMismatches" | "problems" | "totalAbsDiff" | "toleranceCents" | "match">,
+): string {
+  const within = r.withinTolerance.length
+    ? `; ${plural(r.withinTolerance.length, "cell")} within the ${money(r.toleranceCents)} tolerance (sum ${money(r.withinTolerance.reduce((s, c) => s + Math.abs(c.diff), 0))})`
+    : "";
+  if (r.match) {
+    const first = r.columns[0];
+    const last = r.columns[r.columns.length - 1];
+    return `MATCH: ${first.label} to ${last.label} (${plural(r.columns.length, "month")})${within}`;
+  }
+  const n = r.mismatches.length + r.monthMismatches.length + r.problems.length;
+  const parts = [
+    r.mismatches.length ? plural(r.mismatches.length, "cell") : "",
+    r.monthMismatches.length ? plural(r.monthMismatches.length, "month total") : "",
+    r.problems.length ? plural(r.problems.length, "problem") + " in the QuickBooks file" : "",
+  ].filter(Boolean);
+  const breakdown = r.monthMismatches.length || r.problems.length ? ` (${parts.join(", ")})` : "";
+  return `${plural(n, "mismatch", "mismatches")}${breakdown}, total abs diff ${money(r.totalAbsDiff)}${within}`;
 }
 
-export function formatReport(r: CompareResult, meta: { file: string; basis: QboPnl["basis"]; readOnly: boolean }): string {
+/**
+ * Which database a DATABASE_URL points at, safe to print: host and database name only, never the
+ * user or password. "pglite:<dir>" is the local embedded database.
+ */
+export function describeDatabase(url: string | undefined): string {
+  if (!url) return "unknown (DATABASE_URL is not set)";
+  if (url.startsWith("pglite:")) return `local PGlite (${url.slice("pglite:".length) || "in memory"}), not production`;
+  try {
+    const u = new URL(url);
+    const name = decodeURIComponent(u.pathname.replace(/^\//, "")) || "(default database)";
+    return `${u.hostname}${u.port ? `:${u.port}` : ""}/${name}`;
+  } catch {
+    return "unknown (DATABASE_URL isn't a URL)";
+  }
+}
+
+export function formatReport(
+  r: CompareResult,
+  meta: { file: string; basis: QboPnl["basis"]; readOnly: boolean; database: string },
+): string {
   const out: string[] = [];
   const first = r.columns[0];
   const last = r.columns[r.columns.length - 1];
   const basis = meta.basis ? `${meta.basis[0].toUpperCase()}${meta.basis.slice(1)} basis` : "basis not stated";
   out.push("# QuickBooks vs our books: Profit and Loss by Month", "");
   out.push(`- QuickBooks file: ${meta.file} (${basis})`);
+  out.push(`- Our books: ${meta.database}`);
   out.push(`- Months: ${first.label} to ${last.label} (${r.columns.length})`);
-  out.push(`- Tolerance: ${money(r.toleranceCents)} per cell`);
+  out.push(`- Tolerance: ${money(r.toleranceCents)} per cell and per month total`);
   out.push("- Diff = ours − QuickBooks. Income and expenses are both positive, as in QuickBooks. Transfers are left out.");
   if (meta.readOnly) out.push("- Read only: our books were read in a READ ONLY database transaction.");
   out.push("");
+
+  if (r.problems.length) {
+    out.push(`## Problems in the QuickBooks file (${r.problems.length})`, "");
+    out.push("The file doesn't add up by its own totals, or can't be trusted as a whole. Each one blocks a MATCH.", "");
+    for (const p of r.problems) out.push(`- ${p.message}`);
+    out.push("");
+  }
 
   if (r.warnings.length) {
     out.push("## Warnings", "");
@@ -391,15 +485,24 @@ export function formatReport(r: CompareResult, meta: { file: string; basis: QboP
   }
 
   out.push("## By month", "");
-  out.push("| Month | Income QB | Income ours | Diff | Expenses QB | Expenses ours | Diff | Net QB | Net ours | Diff |");
-  out.push("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|");
+  out.push("Net Income QB is the file's own Net Income row; Income QB and Expenses QB add up its accounts.", "");
+  out.push("| Month | Income QB | Income ours | Diff | Expenses QB | Expenses ours | Diff | Net Income QB | Net ours | Diff | Totals |");
+  out.push("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|");
+  const status = { ok: "ok", cells: "off: see cells", mismatch: "MISMATCH" } as const;
   for (const m of r.months) {
     const d = (a: number, b: number) => signed(b - a);
+    const netQb = m.qbo.netReported === null ? "not in file" : money(m.qbo.netReported);
     out.push(
-      `| ${md(m.column.label)} | ${money(m.qbo.income)} | ${money(m.ours.income)} | ${d(m.qbo.income, m.ours.income)} | ${money(m.qbo.expenses)} | ${money(m.ours.expenses)} | ${d(m.qbo.expenses, m.ours.expenses)} | ${money(m.qbo.net)} | ${money(m.ours.net)} | ${d(m.qbo.net, m.ours.net)} |`,
+      `| ${md(m.column.label)} | ${money(m.qbo.income)} | ${money(m.ours.income)} | ${d(m.qbo.income, m.ours.income)} | ${money(m.qbo.expenses)} | ${money(m.ours.expenses)} | ${d(m.qbo.expenses, m.ours.expenses)} | ${netQb} | ${money(m.ours.net)} | ${d(m.qbo.net, m.ours.net)} | ${status[m.status]} |`,
     );
   }
   out.push("");
+  if (r.monthMismatches.length) {
+    out.push(
+      "A MISMATCH month is off by more than the tolerance with no mismatched cell to show for it: small cell differences adding up, or a Net Income row that disagrees with the file's accounts (see Problems).",
+      "",
+    );
+  }
 
   out.push(`## Mismatched cells (${r.mismatches.length})`, "");
   if (!r.mismatches.length) out.push("Every month × category cell matches.", "");
@@ -421,6 +524,15 @@ export function formatReport(r: CompareResult, meta: { file: string; basis: QboP
       out.push(`| ${l.date} | ${signed(l.amountCents)} | ${md(l.tx.description + split)} | ${l.tx.source} | /transactions/${l.tx.id} |`);
     }
     if (c.lines.length > MAX_LINES_PER_CELL) out.push("", `…and ${c.lines.length - MAX_LINES_PER_CELL} more.`);
+    out.push("");
+  }
+
+  if (r.withinTolerance.length) {
+    out.push(`## Cells within the ${money(r.toleranceCents)} tolerance (${r.withinTolerance.length})`, "");
+    out.push("These differ, but by no more than the tolerance per cell. Month totals are still checked against the tolerance.", "");
+    for (const c of r.withinTolerance) {
+      out.push(`- ${c.column.label} · ${c.label}: QuickBooks ${money(c.qbo)} · ours ${money(c.ours)} · diff ${signed(c.diff)}`);
+    }
     out.push("");
   }
 

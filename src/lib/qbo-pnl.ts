@@ -2,11 +2,16 @@
  * Reads a QuickBooks Online "Profit and Loss by Month" CSV export: the QuickBooks side of
  * `npm run qbo:compare`. Pure, so every layout it tolerates is unit-tested (qbo-pnl.test.ts).
  *
+ * Rule: every dollar in the file is either read into an account, or the run can't say MATCH. A row
+ * the parser can't place throws (QboPnlParseError, with the line). A file whose own totals don't add
+ * up is read, but each disagreement is a blocking `problem`.
+ *
  * The layout is written from memory and unverified against a real export. What it assumes:
  * - Preamble lines (company, report title, date range, "Cash Basis") come before a header row whose
  *   cells after the first are month labels plus an optional "Total" column, e.g. `,Jan 2026,...,Total`.
- *   Labels may be "Jan 2026", "January 2026" or a partial month such as "Oct 1-15, 2026".
- * - The first column holds the row label; amount columns line up under the month headers.
+ *   Labels may be "Jan 2026", "January 2026" or a partial month such as "Oct 1-15, 2026". Months are
+ *   consecutive; only the first and last may be partial.
+ * - The first column holds the row label; amounts sit under the month headers and nowhere else.
  * - Sections are headings with no amounts (Income, Cost of Goods Sold, Expenses, Other Income,
  *   Other Expenses), each closed by "Total X" or "Total for X".
  * - A parent account with sub-accounts is a heading (with or without its own amounts) closed by its
@@ -14,10 +19,11 @@
  * - Gross Profit, Net Operating Income, Net Other Income and Net Income are summary rows: kept as
  *   cross-checks, never as accounts.
  * - Income and expense amounts are both positive; a refund in an expense account is negative.
+ * - The "Cash Basis ..." footer comes after the last section.
  * - The Total column is ignored for the comparison (it's recomputed), but checked against the months.
  */
 import Papa from "papaparse";
-import { monthEnd, type IsoDate, type MonthKey } from "./dates";
+import { addMonths, monthEnd, type IsoDate, type MonthKey } from "./dates";
 import { formatCents, parseAmountToCents } from "./money";
 
 export type QboSection = "income" | "cogs" | "expenses" | "otherIncome" | "otherExpenses";
@@ -52,6 +58,13 @@ export type QboAccount = {
 
 export type QboCheckName = "Gross Profit" | "Net Operating Income" | "Net Other Income" | "Net Income";
 
+/**
+ * The file disagrees with itself (a Total or summary row vs its accounts), or can't be trusted as a
+ * whole (no Net Income row, a section with no Total row, Accrual basis). Any problem blocks MATCH.
+ * `month` is set when the problem is about one month, so `selectMonths` can drop it with that month.
+ */
+export type QboProblem = { message: string; month: MonthKey | null };
+
 export type QboPnl = {
   columns: QboColumn[];
   months: MonthKey[];
@@ -61,7 +74,9 @@ export type QboPnl = {
   /** Summary rows as QuickBooks reported them. Cross-checks only. */
   checks: { name: QboCheckName; line: number; cents: Record<MonthKey, number> }[];
   basis: "cash" | "accrual" | null;
-  /** Things in the file that don't add up, or that were skipped. The comparison still runs. */
+  /** Blocking: see QboProblem. */
+  problems: QboProblem[];
+  /** Worth reading, but no money is at stake (e.g. the basis isn't stated). */
   warnings: string[];
 };
 
@@ -148,12 +163,17 @@ type Row = {
   line: number;
   indent: number;
   label: string;
-  /** Per column; null = blank cell. */
+  /** First non-empty cell, for recognising the footer. */
+  first: string;
+  /** Per month column; null = blank cell. Only meaningful when `bad` is null. */
   amounts: (number | null)[];
   hasAmounts: boolean;
+  /** The Total column's amount, or null when blank. */
+  totalCell: number | null;
+  /** Why the row's cells can't be read as amounts (thrown unless the row turns out to be the footer). */
+  bad: string | null;
   /** Set on "Total X" / "Total for X" rows. */
   totalName: string | null;
-  basis: "cash" | "accrual" | null;
   blank: boolean;
 };
 
@@ -188,19 +208,35 @@ function findHeader(rows: string[][]): { index: number; columns: { col: number; 
       if ("error" in r.res) throw new QboPnlParseError(`Line ${i + 1}: ${r.res.error}`);
       columns.push({ col: r.col, column: r.res.column });
     }
-    for (let k = 1; k < columns.length; k++) {
-      if (columns[k].column.month <= columns[k - 1].column.month) {
-        throw new QboPnlParseError(
-          `Line ${i + 1}: month columns must run oldest to newest, once each ("${columns[k - 1].column.label}" then "${columns[k].column.label}").`,
-        );
-      }
-    }
+    checkContiguous(columns.map((c) => c.column), i + 1);
     return { index: i, columns, totalCol };
   }
   throw new QboPnlParseError(
     firstError ??
       `Couldn't find the header row with the month columns (like ",Jan 2026,Feb 2026,...,Total"). Run Profit and Loss with columns by Months, Cash basis, and export it to CSV.`,
   );
+}
+
+/**
+ * Months must follow one another with no gap, and only the first column may start late or the last
+ * end early: otherwise money in the gap would never be compared.
+ */
+function checkContiguous(columns: QboColumn[], line: number) {
+  columns.forEach((c, k) => {
+    const prev = columns[k - 1];
+    if (prev && c.month !== addMonths(prev.month, 1)) {
+      throw new QboPnlParseError(
+        c.month <= prev.month
+          ? `Line ${line}: month columns must run oldest to newest, once each ("${prev.label}" then "${c.label}").`
+          : `Line ${line}: the month columns skip from "${prev.label}" to "${c.label}", so the months between would never be compared. Export every month in the range.`,
+      );
+    }
+    if ((k > 0 && !c.from.endsWith("-01")) || (k < columns.length - 1 && c.to !== monthEnd(c.month))) {
+      throw new QboPnlParseError(
+        `Line ${line}: the column "${c.label}" covers only part of its month, but isn't the first or last column, so days would be missed.`,
+      );
+    }
+  });
 }
 
 /** Parses the whole export. Throws QboPnlParseError when the file can't be read as a P&L by month. */
@@ -210,52 +246,57 @@ export function parseQboPnl(text: string): QboPnl {
   const header = findHeader(rows);
   const columns = header.columns.map((c) => c.column);
   const months = columns.map((c) => c.month);
+  const problems: QboProblem[] = [];
   const warnings: string[] = [];
   const toRecord = (vals: number[]) => Object.fromEntries(months.map((m, k) => [m, vals[k] ?? 0]));
   const money = formatCents;
+  const fail = (line: number, message: string): never => {
+    throw new QboPnlParseError(`Line ${line}: ${message}`);
+  };
 
   let basis: QboPnl["basis"] = null;
   for (const r of rows.slice(0, header.index)) {
-    const first = r.map((c) => c.trim()).find(Boolean) ?? "";
-    const b = BASIS.exec(first);
+    const b = BASIS.exec(r.map((c) => c.trim()).find(Boolean) ?? "");
     if (b) basis = b[1].toLowerCase() as "cash" | "accrual";
   }
 
+  const known = new Set([0, ...header.columns.map((c) => c.col), ...(header.totalCol === null ? [] : [header.totalCol])]);
   const body: Row[] = rows.slice(header.index + 1).map((cells, k) => {
     const line = header.index + 2 + k;
     const rawLabel = cells[0] ?? "";
     const label = rawLabel.replace(/\s+/g, " ").trim();
     const indent = /^\s*/.exec(rawLabel)![0].replace(/\t/g, "    ").length;
-    const firstCell = cells.map((c) => c.trim()).find(Boolean) ?? "";
-    const b = BASIS.exec(firstCell);
-    // The footer ("Cash Basis Saturday, November 7, 2026 ...") may be unquoted and spill into the
-    // amount columns, so it is recognised before any amount is read.
-    if (b || !firstCell) {
-      const kind = b ? (b[1].toLowerCase() as "cash" | "accrual") : null;
-      return { line, indent, label, amounts: [], hasAmounts: false, totalName: null, basis: kind, blank: !b };
+    const first = cells.map((c) => c.trim()).find(Boolean) ?? "";
+    let bad: string | null = null;
+    // Money anywhere but under a month or the Total column (e.g. an unquoted 1,800.00 split in two)
+    // would otherwise be misread or dropped without a trace.
+    const strayCol = cells.findIndex((c, col) => !known.has(col) && c.trim() !== "");
+    if (strayCol >= 0) {
+      bad = `"${cells[strayCol].trim()}" in column ${strayCol + 1} isn't under a month heading. Amounts must line up with the header, and a thousands separator must be quoted ("1,800.00"). Export the report again.`;
     }
     const amounts = header.columns.map(({ col, column }) => {
       const t = (cells[col] ?? "").trim();
       if (!t) return null;
       const cents = parseAmountToCents(t);
-      if (cents === null) {
-        throw new QboPnlParseError(`Line ${line}: "${t}" under ${column.label} isn't an amount.`);
-      }
+      if (cents === null) bad ??= `"${t}" under ${column.label} isn't an amount.`;
       return cents;
     });
-    const hasAmounts = amounts.some((a) => a !== null);
+    const totalText = header.totalCol === null ? "" : (cells[header.totalCol] ?? "").trim();
+    const totalCell = totalText ? parseAmountToCents(totalText) : null;
+    if (totalText && totalCell === null) bad ??= `"${totalText}" in the Total column isn't an amount.`;
     const total = TOTAL.exec(label);
-    const row: Row = { line, indent, label, amounts, hasAmounts, totalName: total ? total[1].trim() : null, basis: null, blank: false };
-    // The Total column is ignored, but a row whose months don't add up to it was misread somehow.
-    if (header.totalCol !== null && hasAmounts && !row.totalName && label) {
-      const t = (cells[header.totalCol] ?? "").trim();
-      const reported = t ? parseAmountToCents(t) : null;
-      const sum = amounts.reduce<number>((s, a) => s + (a ?? 0), 0);
-      if (reported !== null && reported !== sum) {
-        warnings.push(`Line ${line}: "${label}" Total column says ${money(reported)}, but its months add up to ${money(sum)}.`);
-      }
-    }
-    return row;
+    return {
+      line,
+      indent,
+      label,
+      first,
+      amounts,
+      hasAmounts: amounts.some((a) => a !== null),
+      totalCell,
+      bad,
+      totalName: total ? total[1].trim() : null,
+      blank: !first,
+    };
   });
 
   const accounts: QboAccount[] = [];
@@ -279,9 +320,11 @@ export function parseQboPnl(text: string): QboPnl {
     const s = sectionFrame();
     return !!s && nextTotal(i, (n) => closes(n, s)) === -1;
   };
+  const noTotal = (s: Frame) =>
+    problems.push({ message: `"${s.label}" (line ${s.line}) has no Total row, so where it ends was guessed and its accounts can't be checked.`, month: null });
   const closeDangling = () => {
     const s = sectionFrame();
-    if (s) warnings.push(`"${s.label}" (line ${s.line}) has no Total row, so where it ends was guessed.`);
+    if (s) noTotal(s);
     stack.length = 0;
   };
 
@@ -295,9 +338,10 @@ export function parseQboPnl(text: string): QboPnl {
     reported.forEach((r, k) => {
       const want = r ?? 0;
       if (want !== sum[k]) {
-        warnings.push(
-          `Line ${line}: "${what}" for ${columns[k].label} says ${money(want)}, but the accounts above it add up to ${money(sum[k])}.`,
-        );
+        problems.push({
+          message: `Line ${line}: "${what}" for ${columns[k].label} says ${money(want)}, but the accounts above it add up to ${money(sum[k])}.`,
+          month: months[k],
+        });
       }
     });
   };
@@ -305,10 +349,27 @@ export function parseQboPnl(text: string): QboPnl {
   for (let i = 0; i < body.length; i++) {
     const r = body[i];
     if (r.blank) continue;
-    if (r.basis) {
-      basis = r.basis;
+    // The footer ("Cash Basis Saturday, November 7, 2026 ...") comes after the last section and may be
+    // unquoted, spilling into the amount columns, so its cells are not read.
+    const footer = BASIS.exec(r.first);
+    if (footer && !stack.length) {
+      basis = footer[1].toLowerCase() as "cash" | "accrual";
       continue;
     }
+    if (r.bad) fail(r.line, r.bad);
+    if (footer) {
+      if (r.hasAmounts) fail(r.line, `"${r.label}" has amounts but looks like the "${footer[0]}" footer. Rename the account in QuickBooks so it doesn't start with "${footer[0]}", then export again.`);
+      continue;
+    }
+
+    // A row whose months don't add up to its own Total column was misread somehow.
+    if (r.totalCell !== null && r.hasAmounts && r.label) {
+      const sum = r.amounts.reduce<number>((s, a) => s + (a ?? 0), 0);
+      if (sum !== r.totalCell) {
+        problems.push({ message: `Line ${r.line}: "${r.label}" Total column says ${money(r.totalCell)}, but its months add up to ${money(sum)}.`, month: null });
+      }
+    }
+
     while (stack.length) {
       const top = stack[stack.length - 1];
       if (top.kind === "group" && top.closeBy === "indent" && r.indent <= top.indent) stack.pop();
@@ -319,14 +380,18 @@ export function parseQboPnl(text: string): QboPnl {
       let k = stack.length - 1;
       while (k >= 0 && !closes(r.totalName, stack[k])) k--;
       if (k < 0) {
-        if (r.hasAmounts) warnings.push(`Line ${r.line}: "${r.label}" doesn't close any section or parent account above it, so it was ignored.`);
+        if (r.hasAmounts) {
+          fail(
+            r.line,
+            `"${r.label}" has amounts and starts with "Total", but doesn't close any section or parent account above it, so it can't be read safely. If it is an account, rename it in QuickBooks so it doesn't start with "Total", then export again.`,
+          );
+        }
         continue;
       }
       for (const f of stack.slice(k + 1)) {
         if (f.kind === "group" && f.closeBy === "total") warnings.push(`"${f.label}" (line ${f.line}) closed without its own Total row.`);
       }
-      const f = stack[k];
-      checkTotal(r.label, r.line, r.amounts, f.sum);
+      checkTotal(r.label, r.line, r.amounts, stack[k].sum);
       stack.length = k;
       continue;
     }
@@ -349,14 +414,15 @@ export function parseQboPnl(text: string): QboPnl {
     const section = sectionFrame();
     if (!section) {
       if (r.hasAmounts) {
-        warnings.push(
-          `Line ${r.line}: "${r.label}" has amounts but isn't under Income, Cost of Goods Sold, Expenses, Other Income or Other Expenses, so it was left out.`,
+        fail(
+          r.line,
+          `"${r.label}" has amounts but isn't under Income, Cost of Goods Sold, Expenses, Other Income or Other Expenses, so it can't be placed.`,
         );
       }
-      continue;
+      continue; // a text line between sections
     }
     if (!r.label) {
-      if (r.hasAmounts) warnings.push(`Line ${r.line} has amounts but no account name, so it was left out.`);
+      if (r.hasAmounts) fail(r.line, "this row has amounts but no account name.");
       continue;
     }
 
@@ -373,7 +439,7 @@ export function parseQboPnl(text: string): QboPnl {
     const ownNames = [nameKey(r.label), nameKey(path[path.length - 1]), nameKey(path.join(":"))];
     const ownTotal = nextTotal(i + 1, (n) => ownNames.includes(nameKey(n)));
     const byTotal = ownTotal !== -1 && (stop === -1 || ownTotal < stop);
-    const next = body.slice(i + 1).find((b) => !b.blank && !b.basis);
+    const next = body.slice(i + 1).find((b) => !b.blank && !BASIS.test(b.first));
     const byIndent = !byTotal && !!next && next.indent > r.indent && !next.totalName;
 
     if (byTotal || byIndent) {
@@ -382,9 +448,7 @@ export function parseQboPnl(text: string): QboPnl {
     // A parent's own amounts are postings to the parent itself: keep them as an account of that name.
     if (r.hasAmounts) addAccount(path, r, section.section);
   }
-  for (const f of stack) {
-    if (f.kind === "section") warnings.push(`"${f.label}" (line ${f.line}) has no Total row, so where it ends was guessed.`);
-  }
+  for (const f of stack) if (f.kind === "section") noTotal(f);
 
   // The same account written twice (e.g. split across pages) is one account.
   const merged = new Map<string, QboAccount>();
@@ -402,49 +466,56 @@ export function parseQboPnl(text: string): QboPnl {
   }
 
   // Cross-check the summary rows against what the accounts add up to.
-  const bySection = (s: QboSection, m: MonthKey) =>
-    finalAccounts.filter((a) => a.section === s).reduce((sum, a) => sum + a.cents[m], 0);
-  const computed: Record<QboCheckName, (m: MonthKey) => number> = {
+  const computed = computedChecks(finalAccounts);
+  for (const c of checks) {
+    columns.forEach((col) => {
+      const want = computed[c.name](col.month);
+      if (c.cents[col.month] !== want) {
+        problems.push({
+          message: `Line ${c.line}: "${c.name}" for ${col.label} says ${money(c.cents[col.month])}, but the accounts add up to ${money(want)}.`,
+          month: col.month,
+        });
+      }
+    });
+  }
+  if (!checks.some((c) => c.name === "Net Income")) {
+    problems.push({ message: `No "Net Income" row found, so the file can't be checked against itself. Was it cut off?`, month: null });
+  }
+  if (basis === "accrual") {
+    problems.push({ message: "This QuickBooks report is Accrual basis; our books are cash basis. Run it again with Cash basis.", month: null });
+  }
+  if (basis === null) warnings.push(`Couldn't find "Cash Basis" in the file. Make sure the report was run on Cash basis.`);
+
+  return { columns, months, sections, accounts: finalAccounts, checks, basis, problems, warnings };
+}
+
+/** What each summary row should say, recomputed from the accounts. */
+export function computedChecks(accounts: QboAccount[]): Record<QboCheckName, (m: MonthKey) => number> {
+  const bySection = (s: QboSection, m: MonthKey) => accounts.filter((a) => a.section === s).reduce((sum, a) => sum + (a.cents[m] ?? 0), 0);
+  return {
     "Gross Profit": (m) => bySection("income", m) - bySection("cogs", m),
     "Net Operating Income": (m) => bySection("income", m) - bySection("cogs", m) - bySection("expenses", m),
     "Net Other Income": (m) => bySection("otherIncome", m) - bySection("otherExpenses", m),
     "Net Income": (m) =>
       bySection("income", m) - bySection("cogs", m) - bySection("expenses", m) + bySection("otherIncome", m) - bySection("otherExpenses", m),
   };
-  for (const c of checks) {
-    columns.forEach((col) => {
-      const want = computed[c.name](col.month);
-      if (c.cents[col.month] !== want) {
-        warnings.push(
-          `Line ${c.line}: "${c.name}" for ${col.label} says ${money(c.cents[col.month])}, but the accounts add up to ${money(want)}.`,
-        );
-      }
-    });
-  }
-  if (!checks.some((c) => c.name === "Net Income")) warnings.push(`No "Net Income" row found, so the file couldn't be cross-checked. Was it cut off?`);
-  if (basis === "accrual") warnings.push("This QuickBooks report is Accrual basis; our books are cash basis. Run it again with Cash basis.");
-  if (basis === null) warnings.push(`Couldn't find "Cash Basis" in the file. Make sure the report was run on Cash basis.`);
-
-  return { columns, months, sections, accounts: finalAccounts, checks, basis, warnings };
 }
 
 /**
  * Restricts a parsed report to the months from..to (inclusive, YYYY-MM; either may be omitted).
- * Months asked for but not in the file become warnings, since they can't be compared.
+ * Asking for a month the file doesn't have is an error: it could never be compared, and a MATCH
+ * would wrongly cover it.
  */
 export function selectMonths(pnl: QboPnl, from?: MonthKey, to?: MonthKey): QboPnl {
   if (from && to && from > to) throw new QboPnlParseError(`--from ${from} is after --to ${to}.`);
-  const columns = pnl.columns.filter((c) => (!from || c.month >= from) && (!to || c.month <= to));
   const first = pnl.columns[0];
   const last = pnl.columns[pnl.columns.length - 1];
-  if (!columns.length) {
+  if ((from && from < first.month) || (to && to > last.month)) {
     throw new QboPnlParseError(
-      `The file covers ${first.label} to ${last.label}; none of those months are in ${from ?? "the start"} to ${to ?? "the end"}.`,
+      `The file covers ${first.label} to ${last.label}, but you asked for ${from ?? first.month} to ${to ?? last.month}. Export the Profit and Loss for every month you want checked, or narrow --from/--to.`,
     );
   }
-  const warnings = [...pnl.warnings];
-  if (from && from < first.month) warnings.push(`The file starts at ${first.label}, so months before it weren't compared.`);
-  if (to && to > last.month) warnings.push(`The file ends at ${last.label}, so months after it weren't compared.`);
+  const columns = pnl.columns.filter((c) => (!from || c.month >= from) && (!to || c.month <= to));
   const months = columns.map((c) => c.month);
   const pick = (r: Record<MonthKey, number>) => Object.fromEntries(months.map((m) => [m, r[m]]));
   return {
@@ -453,6 +524,6 @@ export function selectMonths(pnl: QboPnl, from?: MonthKey, to?: MonthKey): QboPn
     months,
     accounts: pnl.accounts.map((a) => ({ ...a, cents: pick(a.cents) })),
     checks: pnl.checks.map((c) => ({ ...c, cents: pick(c.cents) })),
-    warnings,
+    problems: pnl.problems.filter((p) => p.month === null || months.includes(p.month)),
   };
 }

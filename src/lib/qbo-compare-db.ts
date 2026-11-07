@@ -79,7 +79,16 @@ export type QboCompareRun = { result: CompareResult; report: string; summary: st
 /** Parse the export, read our books (read-only), compare, and format. Throws on unreadable input. */
 export async function runQboCompare(
   db: Db,
-  opts: { csvText: string; fileName: string; from?: MonthKey; to?: MonthKey; toleranceCents?: number; overrides?: unknown },
+  opts: {
+    csvText: string;
+    fileName: string;
+    /** Which database `db` is, for the report header (see `describeDatabase`). */
+    database: string;
+    from?: MonthKey;
+    to?: MonthKey;
+    toleranceCents?: number;
+    overrides?: unknown;
+  },
 ): Promise<QboCompareRun> {
   const pnl = selectMonths(parseQboPnl(opts.csvText), opts.from, opts.to);
   // Columns run oldest to newest, so this spans every column (a partial month included).
@@ -93,6 +102,6 @@ export async function runQboCompare(
     overrides,
     toleranceCents: opts.toleranceCents ?? 0,
   });
-  const report = formatReport(result, { file: opts.fileName, basis: pnl.basis, readOnly: true });
-  return { result, report, summary: mismatchSummary(result), match: result.mismatches.length === 0 };
+  const report = formatReport(result, { file: opts.fileName, basis: pnl.basis, readOnly: true, database: opts.database });
+  return { result, report, summary: mismatchSummary(result), match: result.match };
 }

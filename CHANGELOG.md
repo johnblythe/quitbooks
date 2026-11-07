@@ -3,12 +3,17 @@
 ## [Unreleased] — 2026-11-07
 
 ### Added
-- `npm run qbo:compare`: a read-only check of our cash-basis P&L against a QuickBooks Online "Profit and Loss by Month" CSV export.
+- `npm run qbo:compare`: a read-only check of our cash-basis P&L against a QuickBooks Online "Profit and Loss by Month" CSV export (#8).
   - It compares month by month and category by category, and lists the QuickBooks accounts and our transactions (date, amount, description, source) behind every cell that differs.
   - It also shows the Inbox totals per month, the account mapping (`--map` override, then the import's saved choices, then the same name, then QuickBooks placeholders to the Inbox), and unmapped accounts on both sides.
-  - It ends with `MATCH` (exit 0) or `N mismatches, total abs diff $X` (exit 1). Options: `--from`, `--to`, `--tolerance-cents`, `--map` and `--out`.
-  - It runs inside a `READ ONLY` transaction, so it is safe to run against production.
-  - The P&L parser (`src/lib/qbo-pnl.ts`) tolerates preamble lines, "Jan 2026" / "January 2026" / partial-month columns, all five sections, "Total X" / "Total for X" rows, and sub-accounts (by Total rows, indentation or `Parent:Child`). It cross-checks section totals, Gross Profit, Net Operating Income and Net Income.
+  - It ends with `MATCH: <months>` (exit 0) or `N mismatches, total abs diff $X` (exit 1). Options: `--from`, `--to`, `--tolerance-cents`, `--map` and `--out`.
+  - MATCH is only possible when every dollar in the file was read and compared:
+    - section Totals, Gross Profit and Net Income that disagree with the file's own accounts block it, as do a missing Net Income row or an Accrual report;
+    - each month's net is checked against QuickBooks' own Net Income row;
+    - the tolerance applies to month totals too, and differences under it are listed;
+    - months asked for but not in the file, gaps between month columns, and rows the parser can't place (a "Total …" row closing nothing, amounts outside a section or not under a month heading) stop the run with the line number.
+  - It runs inside a `READ ONLY` transaction, so it is safe to run against production. The report names the database it read (host and database name only), and a piped report is never cut off.
+  - The P&L parser (`src/lib/qbo-pnl.ts`) tolerates preamble lines, "Jan 2026" / "January 2026" / partial first or last months, all five sections, "Total X" / "Total for X" rows, and sub-accounts (by Total rows, indentation or `Parent:Child`).
   - New synthetic fixture `fixtures/qbo-pnl-by-month.sample.csv`, matching the Transaction Detail sample, with an end-to-end test from import through compare.
   - A README section, "Checking against QuickBooks", covers which reports to export and how to run it.
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { expandLedgerLines, type LedgerSplit } from "./ledger";
 import {
   compareBooks,
+  describeDatabase,
   formatReport,
   mapAccounts,
   mismatchSummary,
@@ -123,11 +124,12 @@ describe("compareBooks", () => {
   it("matches when every month x category agrees", () => {
     const r = compareBooks({ pnl: simple, categories: cats, lines: lines(simpleBooks()) });
     expect(r.mismatches).toEqual([]);
-    expect(r.months.map((m) => [m.qbo, m.ours])).toEqual([
-      [{ income: 10000, expenses: 4000, net: 6000 }, { income: 10000, expenses: 4000, net: 6000 }],
-      [{ income: 10000, expenses: 3000, net: 7000 }, { income: 10000, expenses: 3000, net: 7000 }],
+    expect(r.months.map((m) => [m.qbo, m.ours, m.status])).toEqual([
+      [{ income: 10000, expenses: 4000, net: 6000, netReported: 6000, netComputed: 6000 }, { income: 10000, expenses: 4000, net: 6000 }, "ok"],
+      [{ income: 10000, expenses: 3000, net: 7000, netReported: 7000, netComputed: 7000 }, { income: 10000, expenses: 3000, net: 7000 }, "ok"],
     ]);
-    expect(mismatchSummary(r)).toBe("MATCH");
+    expect(mismatchSummary(r)).toBe("MATCH: Jan 2026 to Feb 2026 (2 months)");
+    expect(r.match).toBe(true);
   });
 
   it("adds several QuickBooks accounts into one of our categories", () => {
@@ -202,7 +204,7 @@ describe("compareBooks", () => {
     splits[0] = { ...splits[0], amountCents: 10400 };
     const off = compareBooks({ pnl: p, categories: cats, lines: lines([deposit], splits), overrides: resolveOverrides({ "Bank Charges": "Bank & Payment Fees" }, cats) });
     expect(off.mismatches.map((c) => [c.label, c.diff])).toEqual([["Product Sales", 100], ["Bank & Payment Fees", 100]]);
-    const report = formatReport(off, { file: "p.csv", basis: "cash", readOnly: true });
+    const report = formatReport(off, { file: "p.csv", basis: "cash", readOnly: true, database: "test db" });
     expect(report).toContain("| 2026-01-10 | +$104.00 | Square deposit (split 1/2: Sales) | csv | /transactions/");
     expect(report).toContain("| 2026-01-10 | -$4.00 | Square deposit (split 2/2: Fees) | csv | /transactions/");
   });
@@ -212,7 +214,7 @@ describe("compareBooks", () => {
     const r = compareBooks({ pnl: p, categories: cats, lines: lines([tx("2026-01-10", 500, "c-supplies")]), overrides: resolveOverrides({ "Supply Refunds": "Supplies" }, cats) });
     expect(r.mismatches).toEqual([]);
     expect(r.cells[0]).toMatchObject({ key: "c-supplies", qbo: -500, ours: -500 });
-    expect(r.months[0].qbo).toEqual({ income: 500, expenses: 0, net: 500 });
+    expect(r.months[0].qbo).toMatchObject({ income: 500, expenses: 0, net: 500 });
     expect(r.months[0].ours).toEqual({ income: 0, expenses: -500, net: 500 });
   });
 
@@ -233,7 +235,7 @@ describe("compareBooks", () => {
       ["qbo:Mystery Account", `QuickBooks "Mystery Account" (not mapped)`, 700, 0, "Not mapped to any of our categories. Add it to --map."],
       ["c-supplies", "Supplies", 0, 700, null],
     ]);
-    const report = formatReport(r, { file: "p.csv", basis: "cash", readOnly: true });
+    const report = formatReport(r, { file: "p.csv", basis: "cash", readOnly: true, database: "test db" });
     expect(report).toContain("QuickBooks accounts not mapped to anything of ours (add them to --map): \n- Mystery Account (Expenses)");
     expect(report).toContain("Our categories no QuickBooks account maps to: \n- Supplies (expense, $7.00 in range)");
   });
@@ -255,16 +257,114 @@ describe("compareBooks", () => {
   });
 });
 
+describe("the verdict says MATCH only when every dollar was compared", () => {
+  it("blocks on the file's own Net Income row disagreeing, even when every cell agrees", () => {
+    const tampered = pnl([
+      "Income",
+      "Booth Rent,100.00,100.00,200.00",
+      "Total Income,100.00,100.00,200.00",
+      "Expenses",
+      "Utilities,40.00,30.00,70.00",
+      "Total Expenses,40.00,30.00,70.00",
+      "Net Income,60.00,29.00,89.00",
+    ]);
+    const r = compareBooks({ pnl: tampered, categories: cats, lines: lines(simpleBooks()) });
+    expect(r.mismatches).toEqual([]);
+    expect(r.problems.map((p) => p.message)).toEqual([`Line 11: "Net Income" for Feb 2026 says $29.00, but the accounts add up to $70.00.`]);
+    expect(r.months.map((m) => [m.status, m.qbo.net, m.qbo.netComputed, m.ours.net, m.diff])).toEqual([
+      ["ok", 6000, 6000, 6000, 0],
+      ["mismatch", 2900, 7000, 7000, 4100],
+    ]);
+    expect(r.match).toBe(false);
+    expect(mismatchSummary(r)).toBe("2 mismatches (1 month total, 1 problem in the QuickBooks file), total abs diff $41.00");
+    const report = formatReport(r, { file: "p.csv", basis: "cash", readOnly: true, database: "test db" });
+    expect(report).toContain("## Problems in the QuickBooks file (1)");
+    expect(report).toContain("| Feb 2026 | $100.00 | $100.00 | 0 | $30.00 | $30.00 | 0 | $29.00 | $70.00 | +$41.00 | MISMATCH |");
+  });
+
+  it("can't MATCH a file with no Net Income row", () => {
+    const cut = pnl(["Income", "Booth Rent,100.00,100.00,200.00", "Total Income,100.00,100.00,200.00", "Expenses", "Utilities,40.00,30.00,70.00", "Total Expenses,40.00,30.00,70.00"]);
+    const r = compareBooks({ pnl: cut, categories: cats, lines: lines(simpleBooks()) });
+    expect(r.mismatches).toEqual([]);
+    expect(r.match).toBe(false);
+    expect(mismatchSummary(r)).toBe("1 mismatch (1 problem in the QuickBooks file), total abs diff $0.00");
+    expect(formatReport(r, { file: "p.csv", basis: "cash", readOnly: true, database: "test db" })).toContain("| not in file | $60.00 |");
+  });
+
+  it("doesn't let differences under the tolerance add up unseen", () => {
+    const p = pnl(
+      [
+        "Income",
+        "Booth Rent,100.00,100.00,100.00,300.00",
+        "Total Income,100.00,100.00,100.00,300.00",
+        "Expenses",
+        "Utilities,50.00,50.00,50.00,150.00",
+        "Total Expenses,50.00,50.00,50.00,150.00",
+        "Net Income,50.00,50.00,50.00,150.00",
+      ],
+      ",Jan 2026,Feb 2026,Mar 2026,Total",
+    );
+    const books = ["01", "02", "03"].flatMap((m) => [tx(`2026-${m}-05`, 10500, "c-rent"), tx(`2026-${m}-06`, -4500, "c-util")]);
+    const r = compareBooks({ pnl: p, categories: cats, lines: lines(books), toleranceCents: 500 });
+    expect(r.mismatches).toEqual([]);
+    expect(r.withinTolerance).toHaveLength(6);
+    expect(r.months.map((m) => [m.status, m.diff])).toEqual([["mismatch", 1000], ["mismatch", 1000], ["mismatch", 1000]]);
+    expect(r.match).toBe(false);
+    expect(mismatchSummary(r)).toBe("3 mismatches (3 month totals), total abs diff $30.00; 6 cells within the $5.00 tolerance (sum $30.00)");
+    expect(formatReport(r, { file: "p.csv", basis: "cash", readOnly: true, database: "test db" })).toContain("## Cells within the $5.00 tolerance (6)");
+  });
+
+  it("allows exactly the tolerance, and no more, per cell and per month", () => {
+    const at = (cents: number) => {
+      const books = simpleBooks();
+      books[0] = tx("2026-01-05", cents, "c-rent");
+      return compareBooks({ pnl: simple, categories: cats, lines: lines(books), toleranceCents: 500 });
+    };
+    const five = at(10500);
+    expect(five.match).toBe(true);
+    expect(mismatchSummary(five)).toBe("MATCH: Jan 2026 to Feb 2026 (2 months); 1 cell within the $5.00 tolerance (sum $5.00)");
+    const six = at(10600);
+    expect(six.match).toBe(false);
+    expect(six.mismatches.map((c) => [c.label, c.diff])).toEqual([["Booth Rent", 600]]);
+    expect(six.months[0].status).toBe("cells");
+    expect(mismatchSummary(six)).toBe("1 mismatch, total abs diff $6.00");
+  });
+
+  it("doesn't count a month twice when its mismatched cells already show the difference", () => {
+    const books = simpleBooks();
+    books[3] = tx("2026-02-20", -3100, "c-util");
+    const r = compareBooks({ pnl: simple, categories: cats, lines: lines(books) });
+    expect(r.months.map((m) => m.status)).toEqual(["ok", "cells"]);
+    expect(r.monthMismatches).toEqual([]);
+    expect(mismatchSummary(r)).toBe("1 mismatch, total abs diff $1.00");
+  });
+});
+
+describe("describeDatabase", () => {
+  it("names the host and database, never the user or password", () => {
+    const d = describeDatabase("postgresql://quitbooks_owner:s3cret-pw@ep-snowy-queen-123-pooler.us-east-1.aws.neon.tech/quitbooks?sslmode=require");
+    expect(d).toBe("ep-snowy-queen-123-pooler.us-east-1.aws.neon.tech/quitbooks");
+    expect(d).not.toMatch(/s3cret|quitbooks_owner/);
+    expect(describeDatabase("postgres://u:p@localhost:5433/books")).toBe("localhost:5433/books");
+  });
+
+  it("says when it's the local PGlite, unset or unreadable", () => {
+    expect(describeDatabase("pglite:./.pglite")).toBe("local PGlite (./.pglite), not production");
+    expect(describeDatabase(undefined)).toBe("unknown (DATABASE_URL is not set)");
+    expect(describeDatabase("not a url :: secret")).toBe("unknown (DATABASE_URL isn't a URL)");
+  });
+});
+
 describe("formatReport", () => {
   it("ends with MATCH or the mismatch count, and escapes table cells", () => {
-    const ok = formatReport(compareBooks({ pnl: simple, categories: cats, lines: lines(simpleBooks()) }), { file: "p.csv", basis: "cash", readOnly: true });
-    expect(ok.trimEnd().split("\n").at(-1)).toBe("MATCH");
+    const ok = formatReport(compareBooks({ pnl: simple, categories: cats, lines: lines(simpleBooks()) }), { file: "p.csv", basis: "cash", readOnly: true, database: "test db" });
+    expect(ok.trimEnd().split("\n").at(-1)).toBe("MATCH: Jan 2026 to Feb 2026 (2 months)");
     expect(ok).toContain("- Read only: our books were read in a READ ONLY database transaction.");
-    expect(ok).toContain("| Jan 2026 | $100.00 | $100.00 | 0 | $40.00 | $40.00 | 0 | $60.00 | $60.00 | 0 |");
+    expect(ok).toContain("| Jan 2026 | $100.00 | $100.00 | 0 | $40.00 | $40.00 | 0 | $60.00 | $60.00 | 0 | ok |");
 
     const books = simpleBooks();
     books[1] = tx("2026-01-20", -4500, "c-util", "Duke | Energy");
-    const bad = formatReport(compareBooks({ pnl: simple, categories: cats, lines: lines(books) }), { file: "p.csv", basis: "cash", readOnly: true });
+    const bad = formatReport(compareBooks({ pnl: simple, categories: cats, lines: lines(books) }), { file: "p.csv", basis: "cash", readOnly: true, database: "test db" });
     expect(bad).toContain("Duke \\| Energy");
     expect(bad).toContain("### Jan 2026 · Utilities (expense)");
     expect(bad).toContain("QuickBooks $40.00 · ours $45.00 · diff +$5.00");
@@ -275,7 +375,7 @@ describe("formatReport", () => {
   it("caps a long cell's transaction list", () => {
     const many = Array.from({ length: 60 }, (_, i) => tx("2026-01-02", -100, "c-supplies", `buy ${i}`));
     const r = compareBooks({ pnl: simple, categories: cats, lines: lines([...simpleBooks(), ...many]) });
-    expect(formatReport(r, { file: "p.csv", basis: "cash", readOnly: true })).toContain("…and 10 more.");
+    expect(formatReport(r, { file: "p.csv", basis: "cash", readOnly: true, database: "test db" })).toContain("…and 10 more.");
   });
 });
 
