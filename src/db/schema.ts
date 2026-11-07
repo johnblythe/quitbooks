@@ -76,6 +76,9 @@ export const importBatches = pgTable("import_batches", {
   skippedCount: integer("skipped_count").notNull(),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Set when the import was undone (its csv rows deleted). The batch row stays, as history. */
+  undoneAt: timestamp("undone_at", { withTimezone: true }),
+  undoneBy: uuid("undone_by").references(() => users.id),
 });
 
 /** A linked bank feed (SimpleFIN). The Access URL holds credentials, so it is stored encrypted. */

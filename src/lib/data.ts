@@ -215,6 +215,7 @@ export async function getSavedMapping(name: string = BMO_MAPPING_NAME): Promise<
   return row?.mapping ?? null;
 }
 
+/** Newest imports first, undone ones included (with `undoneAt`) so the list doubles as a history. */
 export async function getRecentImports(limit = 5) {
   await connection();
   const db = await getDb();

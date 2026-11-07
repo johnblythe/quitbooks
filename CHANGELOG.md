@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased] — 2026-11-07
+
+### Added
+- Undo an import from Recent imports on `/import`:
+  - an inline confirmation shows how many transactions go, the net amount, and how many were sorted, split or edited; nothing is removed until you confirm;
+  - one atomic undo deletes the rows the import added (their split lines go with them) and marks the batch undone; Recent imports keeps it, labeled "Undone <date>";
+  - kept: entries you typed in that the import matched (their dedupe hash still stops that bank line from importing twice), bank-feed rows, categories the import created, and the saved column mapping and choices;
+  - refused, with nothing changed, when the batch was already undone or any of its rows is matched to the bank feed;
+  - re-importing the same file afterwards brings its rows back;
+  - migration `0007` adds `import_batches.undone_at` and `undone_by`.
+
 ## Release integration — 2026-10-31
 
 - Import mapping review: dated transactions whose payee starts with "Total" are never skipped as report totals; categories hidden after preview are rejected atomically; failed imports keep their file and choices for correction and retry.
