@@ -33,8 +33,8 @@ async function getDb() {
 const { categories, stylists, transactions, rules, settings, csvMappings, importBatches, bankConnections, bankAccounts } = schema;
 
 export const BMO_MAPPING_NAME = "BMO";
-/** Saved layout for files that carry their own category column (QuickBooks, card exports). */
-export const CATEGORIZED_MAPPING_NAME = "BMO:categories";
+/** Saved layout for files that carry their own category column (defined in import-categories.ts). */
+export { CATEGORIZED_MAPPING_NAME } from "./import-categories";
 
 export async function getCategories(opts: { includeArchived?: boolean } = {}) {
   await connection();

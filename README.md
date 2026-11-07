@@ -88,6 +88,39 @@ then run `fake:restore` again. Users and passwords survive the wipe. Never run e
 | `npm run fake:score -- <csv> <truth.json>` | Score the importer and categorizer against a truth file |
 | `npm run bank:sync` | Run a bank sync from the command line (same as the cron) |
 | `npm run user:add` | Create or reset a login |
+| `npm run qbo:compare -- <pnl.csv>` | Read-only: compare our P&L with a QuickBooks P&L by Month export (see below) |
+
+## Checking against QuickBooks
+
+`npm run qbo:compare` checks our cash-basis P&L against QuickBooks, month by month and category by category. History imported from QuickBooks (Jan–Sep 2026) must match to the penny. From October on, it checks the bank feed plus Inbox sorting against QuickBooks' own numbers.
+
+Export three reports from QuickBooks Online, all **Cash basis**:
+
+1. **Transaction Detail by Account**, for the BMO account only, all dates. This is the history we import (see "Import with categories" below).
+2. **Profit and Loss by Month** (Profit and Loss, Display columns by: Months), covering the months to check. This is what `qbo:compare` reads.
+3. **Balance Sheet** as of the bank feed's start date. It gives the BMO balance where imported history hands over to the feed.
+
+Run it against production. It is read-only: it reads inside a `READ ONLY` transaction, and Postgres refuses any write.
+
+```bash
+DATABASE_URL="$(cs production --pooled)" npm run qbo:compare -- <pnl.csv> --to 2026-09
+```
+
+- Options: `--from YYYY-MM` and `--to YYYY-MM` (the default is every month in the file), `--tolerance-cents N` (default 0), `--out report.md` (also write the report to a file), and `--map map.json`.
+- Output (Markdown):
+  - income, expenses and net per month, QuickBooks vs ours;
+  - every month × category cell that differs, with the QuickBooks accounts that feed it and our transactions in it;
+  - the Inbox totals per month;
+  - the account mapping;
+  - a last line of `MATCH` (exit 0) or `N mismatches, total abs diff $X` (exit 1).
+- Mapping QuickBooks accounts to our categories:
+  - a `--map` file wins: `{"QuickBooks account": "Our category"}`, with `"Inbox"` meaning uncategorized;
+  - then the choices saved by the QuickBooks import;
+  - then the same name, in any case;
+  - then QuickBooks placeholders (Uncategorized Income/Expense, Ask My Accountant) map to our Inbox.
+
+  Sub-accounts roll up to their parent when only the parent matches. Unmapped accounts, and our categories that nothing maps to, are listed.
+- The P&L layout is written from memory and unverified against a real export; the assumptions are listed at the top of `src/lib/qbo-pnl.ts`. If Lauren's file trips the parser, it says which line and why. Totals that don't add up within the file are printed as warnings.
 
 ## How it works
 

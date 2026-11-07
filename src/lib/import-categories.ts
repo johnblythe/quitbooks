@@ -6,6 +6,13 @@
 
 export type CategoryKind = "income" | "expense" | "transfer";
 
+/**
+ * Name of the saved column mapping (`csv_mappings.name`) for files that carry their own category
+ * column (QuickBooks, card exports). Its `categoryMap` holds the remembered choices, which
+ * `npm run qbo:compare` also reads to map QuickBooks accounts onto our categories.
+ */
+export const CATEGORIZED_MAPPING_NAME = "BMO:categories";
+
 /** What to do with one distinct value from the file's category column. */
 export type FileCategoryChoice =
   | { type: "existing"; categoryId: string }

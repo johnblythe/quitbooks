@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased] — 2026-11-07
+
+### Added
+- `npm run qbo:compare`: a read-only check of our cash-basis P&L against a QuickBooks Online "Profit and Loss by Month" CSV export.
+  - It compares month by month and category by category, and lists the QuickBooks accounts and our transactions (date, amount, description, source) behind every cell that differs.
+  - It also shows the Inbox totals per month, the account mapping (`--map` override, then the import's saved choices, then the same name, then QuickBooks placeholders to the Inbox), and unmapped accounts on both sides.
+  - It ends with `MATCH` (exit 0) or `N mismatches, total abs diff $X` (exit 1). Options: `--from`, `--to`, `--tolerance-cents`, `--map` and `--out`.
+  - It runs inside a `READ ONLY` transaction, so it is safe to run against production.
+  - The P&L parser (`src/lib/qbo-pnl.ts`) tolerates preamble lines, "Jan 2026" / "January 2026" / partial-month columns, all five sections, "Total X" / "Total for X" rows, and sub-accounts (by Total rows, indentation or `Parent:Child`). It cross-checks section totals, Gross Profit, Net Operating Income and Net Income.
+  - New synthetic fixture `fixtures/qbo-pnl-by-month.sample.csv`, matching the Transaction Detail sample, with an end-to-end test from import through compare.
+  - A README section, "Checking against QuickBooks", covers which reports to export and how to run it.
+
 ## Release integration — 2026-10-31
 
 - Import mapping review: dated transactions whose payee starts with "Total" are never skipped as report totals; categories hidden after preview are rejected atomically; failed imports keep their file and choices for correction and retry.
