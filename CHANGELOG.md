@@ -28,6 +28,11 @@
 - `qbo:compare`: a partial first or last month (`Jan 15-31, 2026`) gets a warning line right above the verdict saying which dates were compared, even when the whole month was asked for (#11).
 - `qbo:compare`: clearer messages for text in a column with no heading and for an unknown summary row, instead of a hint about thousands separators (#11).
 - `qbo:compare` won't print part of a malformed `DATABASE_URL`'s user or password in the report header (#11).
+- Import: the "Create new" category kind is re-guessed when you flip "money out as positive", unless you picked the kind yourself; the category groups and their Booth Rent default are now built by one tested function, with one categorizer pass per row (#10).
+- Import: the "Recent imports" card shows a new batch right after the import finishes, without a reload (#9).
+- Import: "1 row couldn't be read and was NOT imported", and the same "was/were" fix for the skipped-rows and report-lines messages (#9).
+- Import: if two previews overlap (for example after changing columns quickly), only the latest one's result or error is shown (#5).
+- Import: tests for the checks on the category choices sent with an import (#5).
 - Import: an undated row whose first cell starts with "Total" but that has an amount is now reported as a parse error instead of silently skipped as report furniture; "Total for ..." rows with a blank or "Total" date cell and the Cash/Accrual Basis footer are still skipped (#5 P4-2).
 - Import: remembered category choices are merged with the stored ones inside the commit transaction (capped at 5000) instead of being replaced by only this file's choices, and the preview uses the remembered map even when another saved column layout was picked (#5 P4-3).
 - Import: re-previewing (changing a column) restarts from the server's defaults and keeps only the category choices you actually edited, dropping any pick whose category was hidden or deleted; a new file or a changed category column resets them (#5 P4-4).

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCategoryGroups,
   categoryKey,
   defaultChoice,
   defaultChoices,
@@ -156,5 +157,41 @@ describe("resolveRowCategory", () => {
   });
   it("sends Booth Rent without a stylist to the Inbox", () => {
     expect(resolveRowCategory("c-booth", auto, "c-booth")).toEqual({ categoryId: null, stylistId: null });
+  });
+});
+
+describe("buildCategoryGroups (#10 R6-2)", () => {
+  type Auto = { categoryId: string | null; stylistId: string | null };
+  const none: Auto = { categoryId: null, stylistId: null };
+  const rent: Auto = { categoryId: "c-booth", stylistId: "s1" };
+  const row = (category: string, amountCents: number, auto = none, duplicate = false) => ({ category, amountCents, duplicate, auto });
+  const build = (rows: ReturnType<typeof row>[], remembered?: Parameters<typeof buildCategoryGroups>[0]["remembered"]) =>
+    buildCategoryGroups({ rows, options: cats, remembered, boothRentCategoryId: "c-booth" });
+
+  it("leaves duplicates out of count and stylistRentCount", () => {
+    const [g] = build([row("Rental Income", 35000, rent), row("Rental Income", 35000, rent, true), row("Rental Income", 20000, none, true)]);
+    expect(g.count).toBe(1);
+    expect(g.stylistRentCount).toBe(1);
+    expect(g.netCents).toBe(35000);
+  });
+  it("does not count a money-out row naming a stylist as stylist rent", () => {
+    const [g] = build([row("Rental Income", -35000, rent), row("Rental Income", 35000, none)]);
+    expect(g.count).toBe(2);
+    expect(g.stylistRentCount).toBe(0);
+  });
+  it("defaults to Booth Rent when most fresh rows are stylist rent", () => {
+    const [g] = build([row("Rental Income", 35000, rent), row("Rental Income", 35000, rent), row("Rental Income", 100, none)]);
+    expect(g.choice).toEqual({ type: "existing", categoryId: "c-booth" });
+  });
+  it("lets a remembered choice beat the Booth Rent default", () => {
+    const [g] = build(
+      [row("Rental Income", 35000, rent), row("Rental Income", 35000, rent)],
+      { "rental income": { type: "existing", categoryId: "c-supplies" } },
+    );
+    expect(g.choice).toEqual({ type: "existing", categoryId: "c-supplies" });
+  });
+  it("skips blank categories and returns nothing for no rows", () => {
+    expect(build([row("", 100)])).toEqual([]);
+    expect(build([])).toEqual([]);
   });
 });

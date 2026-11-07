@@ -13,6 +13,7 @@ import {
   reconcileChoices,
   rowsLabel,
   unnamedNewCount,
+  wasWere,
 } from "@/lib/import-flow-state";
 import { formatDate } from "@/lib/dates";
 import { coveredNote } from "@/lib/bank-cutover";
@@ -31,24 +32,35 @@ export function ImportFlow() {
   const [choices, setChoices] = useState<Record<string, FileCategoryChoice>>({});
   /** Group keys the user edited by hand; only these survive a re-preview. */
   const touched = useRef<Set<string>>(new Set());
+  /** Group keys whose "Create new" kind the user picked; the others are re-guessed on a re-preview. */
+  const kindEdited = useRef<Set<string>>(new Set());
+  /** Counts previews so a slow earlier one can't overwrite a later one's result or error. */
+  const previewSeq = useRef(0);
   const [pending, startTransition] = useTransition();
 
   function runPreview(text: string, m: CsvMapping | null, resetChoices = false) {
     setError(null);
     setResult(null);
-    if (resetChoices) touched.current = new Set();
+    if (resetChoices) {
+      touched.current = new Set();
+      kindEdited.current = new Set();
+    }
+    const seq = ++previewSeq.current;
     startTransition(async () => {
       try {
         const p = await previewImport(text, m);
+        if (seq !== previewSeq.current) return;
         setPreview(p);
         setMapping(p.mapping);
         // Start from the server's defaults; keep only what the user edited, if it still holds.
         const defaults = Object.fromEntries(p.categoryGroups.map((g) => [g.key, g.choice]));
         const edited = new Set(touched.current);
-        setChoices((prev) => reconcileChoices(p.categoryGroups, defaults, prev, edited, p.categories));
+        const kinds = new Set(kindEdited.current);
+        setChoices((prev) => reconcileChoices(p.categoryGroups, defaults, prev, edited, p.categories, kinds));
         setUnlinked(new Set());
         setAckErrors(false);
       } catch {
+        if (seq !== previewSeq.current) return;
         setError("Couldn't read that file. Is it a CSV export?");
       }
     });
@@ -59,6 +71,8 @@ export function ImportFlow() {
     setPreview(null);
     setChoices({});
     touched.current = new Set();
+    kindEdited.current = new Set();
+    previewSeq.current++; // drop any preview still in flight for the previous file
     setError(null);
     if (!f) return;
     if (f.size > MAX_CSV_BYTES) {
@@ -96,8 +110,11 @@ export function ImportFlow() {
     groups.map((g) => [g.key, effectiveChoice(choices[g.key], g.choice, preview?.categories ?? [])]),
   ) as Record<string, FileCategoryChoice>;
 
-  function setChoice(key: string, choice: FileCategoryChoice) {
+  /** `kind`: the edit was the user picking a "Create new" kind (true) or choosing "Create new" afresh (false). */
+  function setChoice(key: string, choice: FileCategoryChoice, kind?: boolean) {
     touched.current.add(key);
+    if (kind === true) kindEdited.current.add(key);
+    else if (kind === false) kindEdited.current.delete(key);
     setChoices((prev) => ({ ...prev, [key]: choice }));
   }
 
@@ -152,19 +169,21 @@ export function ImportFlow() {
       <Card>
         <p className="font-serif text-xl">Imported {result.inserted} transactions</p>
         <p className="mt-1 text-sm text-ink-2">
-          {result.skipped ? `${result.skipped} were already here and were skipped. ` : ""}
+          {result.skipped ? `${result.skipped} ${wasWere(result.skipped)} already here and ${wasWere(result.skipped)} skipped. ` : ""}
           {result.linked ? `${result.linked} linked to existing entries. ` : ""}
           {result.covered ? `${coveredNote(result.covered)} ` : ""}
           {result.createdCategories
             ? `${result.createdCategories} new ${result.createdCategories === 1 ? "category was" : "categories were"} created. `
             : ""}
-          {result.skippedLines ? `${result.skippedLines} report lines were skipped. ` : ""}
+          {result.skippedLines
+            ? `${result.skippedLines} report ${result.skippedLines === 1 ? "line" : "lines"} ${wasWere(result.skippedLines)} skipped. `
+            : ""}
           Anything the rules couldn’t sort is waiting in the Inbox.
         </p>
         {result.errors.length ? (
           <div className="mt-3 rounded-lg border border-warn/40 p-3 text-sm" role="alert">
             <p className="font-medium text-warn">
-              {rowsLabel(result.errors.length)} couldn’t be read and were NOT imported
+              {rowsLabel(result.errors.length)} couldn’t be read and {wasWere(result.errors.length)} NOT imported
             </p>
             <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-ink-2">
               {result.errors.map((e, i) => (
@@ -289,7 +308,7 @@ export function ImportFlow() {
                         onChange={(e) => {
                           const v = e.target.value;
                           if (v === "inbox") setChoice(g.key, { type: "inbox" });
-                          else if (v === "new") setChoice(g.key, { type: "new", name: g.value.slice(0, 60), kind: guessKind(g) });
+                          else if (v === "new") setChoice(g.key, { type: "new", name: g.value.slice(0, 60), kind: guessKind(g) }, false);
                           else setChoice(g.key, { type: "existing", categoryId: v });
                         }}
                         className={inputClass}
@@ -320,7 +339,7 @@ export function ImportFlow() {
                           <select
                             aria-label={`Kind for ${choice.name || g.value}`}
                             value={choice.kind}
-                            onChange={(e) => setChoice(g.key, { ...choice, kind: e.target.value as CategoryKind })}
+                            onChange={(e) => setChoice(g.key, { ...choice, kind: e.target.value as CategoryKind }, true)}
                             className={inputClass}
                           >
                             <option value="income">Income</option>
