@@ -94,4 +94,15 @@ describe("import undo server actions", () => {
     expect(await undoImportAction("00000000-0000-4000-8000-000000000000")).toEqual({ ok: false, message: "That import no longer exists." });
     expect(refresh).toHaveBeenCalledTimes(1);
   });
+
+  it("refreshes when the preview is refused, so a stale tab's Undo button goes away", async () => {
+    await undoImportAction(batchId);
+    refresh.mockClear();
+    expect(await previewImportUndoAction(batchId)).toEqual({ ok: false, error: "That import was already undone." });
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    refresh.mockClear();
+    expect(await previewImportUndoAction("00000000-0000-4000-8000-000000000000")).toEqual({ ok: false, error: "That import no longer exists." });
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
 });

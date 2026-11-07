@@ -12,7 +12,7 @@
   - migration `0007` adds `import_batches.undone_at` and `undone_by`.
   - review follow-ups (#9):
     - the confirmation counts only transactions sorted, split or edited since the import, so categories the import assigned itself no longer make it read "N of N";
-    - an undo that is refused because the import was already undone elsewhere, or no longer exists, now refreshes the list, so the stale Undo button goes away;
+    - an undo (or its confirmation step) that is refused because the import was already undone elsewhere, or no longer exists, now refreshes the list, so the stale Undo button goes away;
     - after Cancel focus returns to the Undo button, and after an undo it moves to the result message; the result region is always present so screen readers announce it;
     - more tests: the rollback when a row can't be deleted, imports over 500 rows, and the undo server actions.
 - `npm run qbo:compare`: a read-only check of our cash-basis P&L against a QuickBooks Online "Profit and Loss by Month" CSV export (#8).

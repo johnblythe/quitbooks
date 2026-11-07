@@ -19,7 +19,10 @@ export async function previewImportUndoAction(batchId: string): Promise<UndoResu
   await requireUser();
   const id = z.uuid().safeParse(batchId);
   if (!id.success) return { ok: false, error: BAD_ID };
-  return previewImportUndo(await getDb(), id.data);
+  const result = await previewImportUndo(await getDb(), id.data);
+  // A refusal ("already undone" in another tab, or gone) means the row's Undo button is stale.
+  if (!result.ok) refresh();
+  return result;
 }
 
 /** Deletes the batch's imported rows and marks it undone. */
