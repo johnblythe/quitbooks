@@ -13,8 +13,12 @@
  *   DATABASE_URL="$(cs production --pooled)" npm run qbo:compare -- pnl.csv --to 2026-09
  *
  * --map is a JSON object {"QuickBooks account": "Our category"}; "Inbox" means uncategorized.
- * Exit code 0 only on MATCH: every cell and every month total within --tolerance-cents, and no
- * problems in the QuickBooks file (its own totals add up). 1 otherwise, including any error.
+ * Exit codes:
+ *   0  MATCH: every cell and every month total within --tolerance-cents, and no problems in the
+ *      QuickBooks file (its own totals add up).
+ *   1  The comparison ran and found mismatches or problems (the report says which).
+ *   2  It couldn't run: bad options, an unreadable file or --map, a QuickBooks file it can't read,
+ *      a database error. Nothing was compared.
  * The report header names the database that was read (host and database name, never credentials).
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -70,6 +74,7 @@ main().then(
   (e: unknown) => {
     const known = e instanceof QboCompareInputError || e instanceof QboPnlParseError;
     console.error(known ? (e as Error).message : e);
-    process.exitCode = 1;
+    // 2, not 1: a run that couldn't compare must not look like a run that found mismatches.
+    process.exitCode = 2;
   },
 );
