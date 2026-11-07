@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileCategoryChoice } from "./import-categories";
-import { canAcknowledgeErrors, reconcileChoices, rowsLabel, unnamedNewCount } from "./import-flow-state";
+import { canAcknowledgeErrors, effectiveChoice, reconcileChoices, rowsLabel, unnamedNewCount } from "./import-flow-state";
 
 const inbox: FileCategoryChoice = { type: "inbox" };
 const existing = (id: string): FileCategoryChoice => ({ type: "existing", categoryId: id });
@@ -48,6 +48,24 @@ describe("unnamedNewCount (#5 P4-6)", () => {
   });
   it("falls back to the server default when there is no edit, and ignores other types", () => {
     expect(unnamedNewCount(groups, { a: inbox })).toBe(0);
+  });
+});
+
+describe("effectiveChoice (R6-1)", () => {
+  const cats = [{ id: "c1" }];
+  it("falls back to the server default when the picked category is gone", () => {
+    expect(effectiveChoice(existing("gone"), inbox, cats)).toEqual(inbox);
+    expect(effectiveChoice(existing("gone"), existing("c1"), cats)).toEqual(existing("c1"));
+  });
+  it("keeps a valid pick, other choice types, and uses the default when there is none", () => {
+    expect(effectiveChoice(existing("c1"), inbox, cats)).toEqual(existing("c1"));
+    const n: FileCategoryChoice = { type: "new", name: "X", kind: "expense" };
+    expect(effectiveChoice(n, inbox, [])).toEqual(n);
+    expect(effectiveChoice(undefined, inbox, cats)).toEqual(inbox);
+  });
+  it("unnamedNewCount uses the effective choice", () => {
+    const g = [{ key: "a", choice: { type: "new", name: "", kind: "expense" } as FileCategoryChoice }];
+    expect(unnamedNewCount(g, { a: existing("gone") }, cats)).toBe(1);
   });
 });
 

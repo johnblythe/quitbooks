@@ -9,6 +9,7 @@
 - Import: a "Create new" category with a blank name disables Import and shows "Name each new category or pick another option." (#5 P4-6).
 - Import: a failed import's error and an earlier failed result are cleared when you retry or re-preview (#5 P4-7).
 - Import: a QuickBooks category that is really stylist rent under another name (most rows already match a stylist) defaults to the existing Booth Rent instead of "Create new", and any group with stylist matches says "N rows look like stylist rent" (#5 P4-8).
+- Import review follow-ups: an undated "Total Wine"-style row with an amount is an error (only "Total for X", a bare "Total" and the Cash/Accrual footer are skipped as report lines); a category hidden after the preview no longer shows "Leave for Inbox" while the stale id is still sent (the default is shown and sent, and a rejected import refreshes the preview); the QuickBooks help says to link the bank first (#5 R6-1, R6-3, R6-4).
 - Import: the QuickBooks help says to export dates before the bank feed starts, since rows on or after the feed's start date are skipped (#5 P4-9).
 - Import: a refused file with nothing importable no longer offers "Import without these N rows", and "1 row" is singular everywhere (#5).
 

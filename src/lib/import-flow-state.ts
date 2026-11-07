@@ -26,14 +26,29 @@ export function reconcileChoices(
   return out;
 }
 
+/**
+ * The choice to show and send for a group: the user's pick, unless it is an "existing" category that
+ * is no longer offered (hidden or deleted after the preview), in which case the server default.
+ */
+export function effectiveChoice(
+  choice: FileCategoryChoice | undefined,
+  fallback: FileCategoryChoice,
+  categories: Pick<CategoryOption, "id">[],
+): FileCategoryChoice {
+  if (!choice) return fallback;
+  if (choice.type === "existing" && !categories.some((c) => c.id === choice.categoryId)) return fallback;
+  return choice;
+}
+
 /** How many "Create new" choices have a blank name; each would fail the import. */
 export function unnamedNewCount(
   groups: (Pick<CategoryGroup, "key"> & { choice: FileCategoryChoice })[],
   choices: Record<string, FileCategoryChoice>,
+  categories?: Pick<CategoryOption, "id">[],
 ): number {
   let n = 0;
   for (const g of groups) {
-    const c = choices[g.key] ?? g.choice;
+    const c = categories ? effectiveChoice(choices[g.key], g.choice, categories) : (choices[g.key] ?? g.choice);
     if (c.type === "new" && !c.name.trim()) n++;
   }
   return n;

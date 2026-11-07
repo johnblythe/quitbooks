@@ -9,6 +9,7 @@ import { guessKind, resolveRowCategory, type CategoryKind, type FileCategoryChoi
 import {
   UNNAMED_CATEGORY_HINT,
   canAcknowledgeErrors,
+  effectiveChoice,
   reconcileChoices,
   rowsLabel,
   unnamedNewCount,
@@ -90,6 +91,10 @@ export function ImportFlow() {
   const errorCount = preview?.errors.length ?? 0;
   const groups = preview?.categoryGroups ?? [];
   const catById = new Map((preview?.categories ?? []).map((c) => [c.id, c]));
+  /** One choice per group, with a pick of a vanished category replaced by the server default. */
+  const effChoices = Object.fromEntries(
+    groups.map((g) => [g.key, effectiveChoice(choices[g.key], g.choice, preview?.categories ?? [])]),
+  ) as Record<string, FileCategoryChoice>;
 
   function setChoice(key: string, choice: FileCategoryChoice) {
     touched.current.add(key);
@@ -98,7 +103,7 @@ export function ImportFlow() {
 
   /** Category and stylist a row will get, given the file category and the current choice for it. */
   function rowOutcome(r: ImportPreview["rows"][number]): { category: string | null; stylist: string | null; isNew: boolean } {
-    const choice = r.fileCategoryKey ? choices[r.fileCategoryKey] : undefined;
+    const choice = r.fileCategoryKey ? effChoices[r.fileCategoryKey] : undefined;
     if (choice?.type === "new") return { category: choice.name.trim() || null, stylist: null, isNew: true };
     const out = resolveRowCategory(
       choice?.type === "existing" ? choice.categoryId : undefined,
@@ -115,7 +120,7 @@ export function ImportFlow() {
     return { category: r.categoryName, stylist: r.stylistName, isNew: false };
   }
   const toInsert = (preview?.newCount ?? 0) - links.length;
-  const unnamed = unnamedNewCount(groups, choices);
+  const unnamed = unnamedNewCount(groups, choices, preview?.categories ?? []);
   const canImport =
     !pending && !!mapping && (preview?.newCount ?? 0) > 0 && (errorCount === 0 || ackErrors) && unnamed === 0;
 
@@ -125,9 +130,11 @@ export function ImportFlow() {
     setResult(null);
     startTransition(async () => {
       try {
-        const sent = Object.fromEntries(groups.map((g) => [g.key, choices[g.key] ?? g.choice]));
+        const sent = Object.fromEntries(groups.map((g) => [g.key, effChoices[g.key]]));
         const outcome = await commitImport(file.text, mapping, file.name, links, ackErrors, sent);
         setResult(outcome);
+        // A rejection (e.g. a category hidden meanwhile): refresh the categories and defaults.
+        if (!outcome.ok) runPreview(file.text, mapping);
         // Keep the file and choices on a rejected commit so the user can correct them and retry.
         if (outcome.ok) {
           setPreview(null);
@@ -261,7 +268,7 @@ export function ImportFlow() {
               </p>
               <ul className="max-h-[60vh] divide-y divide-line overflow-y-auto text-sm">
                 {groups.map((g) => {
-                  const choice = choices[g.key] ?? g.choice;
+                  const choice = effChoices[g.key];
                   const selectValue = choice.type === "existing" ? choice.categoryId : choice.type;
                   return (
                     <li key={g.key} className="space-y-2 py-3">
