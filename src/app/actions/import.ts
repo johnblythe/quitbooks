@@ -177,10 +177,25 @@ export async function previewImport(text: unknown, mapping: unknown): Promise<Im
 
   const duplicateCount = rows.filter((r) => r.duplicate).length;
   const options: CategoryOption[] = cats.filter((c) => !c.archived);
+  const boothRentCategoryId = cats.find((c) => c.systemKey === BOOTH_RENT_KEY)?.id ?? null;
+  // Remembered choices follow the file's category column even when another saved layout was picked.
+  const remembered =
+    parsed.mapping?.categoryMap ?? (parsed.mapping?.categoryColumn ? (await getSavedMapping(CATEGORIZED_MAPPING_NAME))?.categoryMap : undefined);
   const categoryGroups = parsed.mapping?.categoryColumn
     ? (() => {
-        const groups = summarizeFileCategories(parsed.rows.filter((r) => !dupes.has(r.dedupeHash)));
-        const choices = defaultChoices(groups, options, parsed.mapping.categoryMap);
+        const groups = summarizeFileCategories(
+          parsed.rows
+            .filter((r) => !dupes.has(r.dedupeHash))
+            .map((r) => {
+              const auto = categorizer(r);
+              return {
+                category: r.category,
+                amountCents: r.amountCents,
+                stylistRent: !!boothRentCategoryId && auto.categoryId === boothRentCategoryId && !!auto.stylistId,
+              };
+            }),
+        );
+        const choices = defaultChoices(groups, options, remembered, boothRentCategoryId);
         return groups.map((g) => ({ ...g, choice: choices[g.key] }));
       })()
     : [];
@@ -196,7 +211,7 @@ export async function previewImport(text: unknown, mapping: unknown): Promise<Im
     skippedLines: parsed.skippedLines,
     categoryGroups,
     categories: options,
-    boothRentCategoryId: cats.find((c) => c.systemKey === BOOTH_RENT_KEY)?.id ?? null,
+    boothRentCategoryId,
   };
 }
 
