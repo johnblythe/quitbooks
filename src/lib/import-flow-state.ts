@@ -1,19 +1,19 @@
 /**
  * Pure state rules for the import screen, kept out of the component so they can be tested.
  */
-import type { CategoryGroup, CategoryOption, FileCategoryChoice } from "./import-categories";
+import { guessKind, type CategoryGroup, type CategoryOption, type FileCategoryChoice } from "./import-categories";
 
 /**
  * The choices to show after a (re-)preview. Start from the server's defaults, and keep the user's
  * earlier pick only for groups they actually edited (`touched`) that still exist in the new preview.
  * An "existing" pick whose category is no longer offered (hidden or deleted meanwhile) falls back to
  * the default instead of being sent and rejected.
- * A kept "Create new" choice keeps the user's name, but its kind follows the new default's guess
- * (the "money out as positive" toggle flips signs, and with them the guess) unless the user picked
- * the kind themselves (`kindEdited`).
+ * A kept "Create new" choice keeps the user's name, but its kind is guessed again from the new
+ * preview's rows (the "money out as positive" toggle flips signs, and with them the guess) unless
+ * the user picked the kind themselves (`kindEdited`), whatever the new default is.
  */
 export function reconcileChoices(
-  groups: Pick<CategoryGroup, "key">[],
+  groups: Pick<CategoryGroup, "key" | "value" | "inCount" | "outCount" | "netCents">[],
   defaults: Record<string, FileCategoryChoice>,
   prev: Record<string, FileCategoryChoice>,
   touched: ReadonlySet<string>,
@@ -24,10 +24,9 @@ export function reconcileChoices(
   const out: Record<string, FileCategoryChoice> = {};
   for (const g of groups) {
     const kept = prev[g.key];
-    const fresh = defaults[g.key];
     const keep = touched.has(g.key) && kept && (kept.type !== "existing" || offered.has(kept.categoryId));
-    if (!keep) out[g.key] = fresh;
-    else if (kept.type === "new" && fresh.type === "new" && !kindEdited.has(g.key)) out[g.key] = { ...kept, kind: fresh.kind };
+    if (!keep) out[g.key] = defaults[g.key];
+    else if (kept.type === "new" && !kindEdited.has(g.key)) out[g.key] = { ...kept, kind: guessKind(g) };
     else out[g.key] = kept;
   }
   return out;

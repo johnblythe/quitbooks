@@ -4,9 +4,11 @@ import { canAcknowledgeErrors, effectiveChoice, reconcileChoices, rowsLabel, unn
 
 const inbox: FileCategoryChoice = { type: "inbox" };
 const existing = (id: string): FileCategoryChoice => ({ type: "existing", categoryId: id });
+/** A group whose rows are all money out (`out` > 0) or all money in. */
+const grp = (key: string, out = 1, value = "Supplies") => ({ key, value, inCount: out ? 0 : 1, outCount: out, netCents: out ? -100 : 100 });
 
 describe("reconcileChoices (#5 P4-4)", () => {
-  const groups = [{ key: "a" }, { key: "b" }];
+  const groups = [grp("a"), grp("b")];
   const cats = [{ id: "c1" }, { id: "c2" }];
 
   it("uses the new server defaults for groups the user never touched", () => {
@@ -28,22 +30,28 @@ describe("reconcileChoices (#5 P4-4)", () => {
     expect(out).toEqual({ a: n, b: inbox });
   });
   it("only returns groups that still exist", () => {
-    const out = reconcileChoices([{ key: "b" }], { b: inbox }, { a: existing("c1"), b: inbox }, new Set(["a"]), cats);
+    const out = reconcileChoices([grp("b")], { b: inbox }, { a: existing("c1"), b: inbox }, new Set(["a"]), cats);
     expect(Object.keys(out)).toEqual(["b"]);
   });
 });
 
 describe("reconcileChoices kind re-guess (#10 R6-6)", () => {
-  const groups = [{ key: "a" }];
+  // After "money out as positive" is ticked, the same rows read as money in.
+  const flipped = [grp("a", 0)];
   const mine = (kind: "income" | "expense"): FileCategoryChoice => ({ type: "new", name: "My Name", kind });
 
   it("re-guesses the kind of a touched Create new when the user never picked a kind, keeping their name", () => {
-    const out = reconcileChoices(groups, { a: { type: "new", name: "Original", kind: "income" } }, { a: mine("expense") }, new Set(["a"]), []);
-    expect(out.a).toEqual({ type: "new", name: "My Name", kind: "income" });
+    const out = reconcileChoices(flipped, { a: { type: "new", name: "Original", kind: "income" } }, { a: mine("expense") }, new Set(["a"]), []);
+    expect(out.a).toEqual(mine("income"));
+  });
+  it("re-guesses it even when the new default isn't a Create new", () => {
+    expect(reconcileChoices(flipped, { a: inbox }, { a: mine("expense") }, new Set(["a"]), []).a).toEqual(mine("income"));
+    const out = reconcileChoices(flipped, { a: existing("c1") }, { a: mine("expense") }, new Set(["a"]), [{ id: "c1" }]);
+    expect(out.a).toEqual(mine("income"));
   });
   it("keeps a kind the user picked", () => {
     const out = reconcileChoices(
-      groups,
+      flipped,
       { a: { type: "new", name: "Original", kind: "income" } },
       { a: mine("expense") },
       new Set(["a"]),
@@ -52,9 +60,9 @@ describe("reconcileChoices kind re-guess (#10 R6-6)", () => {
     );
     expect(out.a).toEqual(mine("expense"));
   });
-  it("keeps the touched pick when the new default is not a Create new", () => {
-    const out = reconcileChoices(groups, { a: inbox }, { a: mine("expense") }, new Set(["a"]), []);
-    expect(out.a).toEqual(mine("expense"));
+  it("guesses a transfer from the file's value, as the first guess does", () => {
+    const out = reconcileChoices([grp("a", 1, "Owner's Draw")], { a: inbox }, { a: mine("expense") }, new Set(["a"]), []);
+    expect(out.a).toEqual({ ...mine("expense"), kind: "transfer" });
   });
 });
 
