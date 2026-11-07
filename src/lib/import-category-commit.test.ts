@@ -13,7 +13,7 @@ import { BOOTH_RENT_KEY } from "@/db/defaults";
 import * as schema from "@/db/schema";
 import { detectMapping, parseBankCsv, type CsvMapping } from "./csv";
 import { categorize } from "./categorize";
-import { commitParsedImport, ImportCategoryError } from "./import-commit";
+import { commitParsedImport, ImportCategoryError, mergeCategoryMap } from "./import-commit";
 import {
   categoryKey,
   defaultChoices,
@@ -269,6 +269,29 @@ describe("remembered mapping", () => {
     const [saved2] = await db.select().from(csvMappings).where(eq(csvMappings.name, "BMO:categories"));
     const next = defaultChoices(groups, await cats(), saved2.mapping.categoryMap);
     expect(next["supplies"]).toEqual({ type: "inbox" });
+  });
+
+  it("keeps earlier choices when a later import has a different set of categories (#5 P4-3)", async () => {
+    const first = "Date,Name,Split,Amount\n10/01/2026,Alpha,Supplies,-5.00\n10/02/2026,Beta,Gadgets,-6.00\n";
+    const second = "Date,Name,Split,Amount\n10/03/2026,Gamma,Widgets,-7.00\n10/04/2026,Delta,Supplies,-8.00\n";
+    await run({ categoryChoices: { gadgets: { type: "new", name: "Gadgets", kind: "expense" }, supplies: { type: "existing", categoryId: suppliesId } } }, first);
+    await run({ categoryChoices: { widgets: { type: "inbox" }, supplies: { type: "inbox" } } }, second);
+    const [saved] = await db.select().from(csvMappings).where(eq(csvMappings.name, "BMO:categories"));
+    const map = saved.mapping.categoryMap!;
+    const [gadgets] = await db.select().from(categories).where(eq(categories.name, "Gadgets"));
+    expect(map["gadgets"]).toEqual({ type: "existing", categoryId: gadgets.id }); // survived the second import
+    expect(map["widgets"]).toEqual({ type: "inbox" });
+    expect(map["supplies"]).toEqual({ type: "inbox" }); // this import's choice wins
+  });
+
+  it("mergeCategoryMap caps the memory, dropping the oldest entries", () => {
+    const stored = Object.fromEntries(Array.from({ length: 5000 }, (_, i) => [`old${i}`, { type: "inbox" } as const]));
+    const merged = mergeCategoryMap(stored, { fresh: { type: "inbox" }, old0: { type: "inbox" } });
+    const keys = Object.keys(merged);
+    expect(keys).toHaveLength(5000);
+    expect(keys).toContain("fresh");
+    expect(keys).toContain("old0");
+    expect(keys).not.toContain("old1");
   });
 
   it("does not store a category map for a mapping without a category column", async () => {
