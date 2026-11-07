@@ -186,21 +186,26 @@ export function joinDescription(name: string, memo: string): string {
 
 const REPORT_FURNITURE = /^(total\b|(cash|accrual) basis\b)/i;
 
+const REPORT_FOOTER = /^(cash|accrual) basis\b/i;
+
 /**
- * Is this record report furniture rather than a transaction? True for "Total for ..." / "TOTAL" rows,
- * the "Cash Basis ..." / "Accrual Basis ..." footer, and rows with no readable date and no amount at
- * all (QuickBooks section headings that carry just an account name). A row with an amount but a
- * bad date is NOT furniture: that is a real parse error.
+ * Is this record report furniture rather than a transaction? True for the "Cash Basis ..." /
+ * "Accrual Basis ..." footer, rows with no amount at all (QuickBooks section headings that carry just
+ * an account name, "Total for ..." rows without a figure), and "Total ..." rows whose date cell is
+ * blank or itself furniture. A row with an amount and a bad date is NOT furniture: that is a real
+ * parse error, even when its payee starts with "Total" ("Total Wine" with a mistyped date).
  */
 function isReportLine(record: Record<string, string>, mapping: CsvMapping, hasDate: boolean): boolean {
   // A dated bank row is activity even when its payee starts with "Total" and precedes the date.
   if (hasDate) return false;
   const cells = Object.values(record).filter((v): v is string => typeof v === "string");
   const first = cells.map((c) => c.trim()).find(Boolean) ?? "";
-  if (REPORT_FURNITURE.test(first)) return true;
+  if (REPORT_FOOTER.test(first)) return true;
   const amountCols =
     mapping.amountMode === "single" ? [mapping.amountColumn] : [mapping.debitColumn, mapping.creditColumn];
-  return amountCols.every((c) => !(record[c ?? ""] ?? "").trim());
+  if (amountCols.every((c) => !(record[c ?? ""] ?? "").trim())) return true;
+  const dateCell = (record[mapping.dateColumn] ?? "").trim();
+  return REPORT_FURNITURE.test(first) && (dateCell === "" || REPORT_FURNITURE.test(dateCell));
 }
 
 /**
