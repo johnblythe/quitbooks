@@ -1,5 +1,7 @@
 "use server";
 
+import { refresh } from "next/cache";
+
 import { getDb, schema } from "@/db";
 import { BOOTH_RENT_KEY } from "@/db/defaults";
 import { requireUser } from "@/lib/auth";
@@ -14,8 +16,7 @@ import {
 } from "@/lib/import-commit";
 import {
   categoryKey,
-  defaultChoices,
-  summarizeFileCategories,
+  buildCategoryGroups,
   type CategoryGroup,
   type CategoryOption,
   type FileCategoryChoice,
@@ -156,8 +157,9 @@ export async function previewImport(text: unknown, mapping: unknown): Promise<Im
   const catName = new Map(cats.map((c) => [c.id, c.name]));
   const stylistName = new Map(people.map((s) => [s.id, s.name]));
 
-  const rows: PreviewRow[] = parsed.rows.map((r) => {
-    const auto = categorizer(r);
+  const autos = parsed.rows.map((r) => categorizer(r));
+  const rows: PreviewRow[] = parsed.rows.map((r, i) => {
+    const auto = autos[i];
     const hit = matches.get(r.line);
     return {
       line: r.line,
@@ -183,22 +185,17 @@ export async function previewImport(text: unknown, mapping: unknown): Promise<Im
   const remembered =
     parsed.mapping?.categoryMap ?? (parsed.mapping?.categoryColumn ? (await getSavedMapping(CATEGORIZED_MAPPING_NAME))?.categoryMap : undefined);
   const categoryGroups = parsed.mapping?.categoryColumn
-    ? (() => {
-        const groups = summarizeFileCategories(
-          parsed.rows
-            .filter((r) => !dupes.has(r.dedupeHash))
-            .map((r) => {
-              const auto = categorizer(r);
-              return {
-                category: r.category,
-                amountCents: r.amountCents,
-                stylistRent: !!boothRentCategoryId && auto.categoryId === boothRentCategoryId && !!auto.stylistId,
-              };
-            }),
-        );
-        const choices = defaultChoices(groups, options, remembered, boothRentCategoryId);
-        return groups.map((g) => ({ ...g, choice: choices[g.key] }));
-      })()
+    ? buildCategoryGroups({
+        rows: parsed.rows.map((r, i) => ({
+          category: r.category,
+          amountCents: r.amountCents,
+          duplicate: dupes.has(r.dedupeHash),
+          auto: autos[i],
+        })),
+        options,
+        remembered,
+        boothRentCategoryId,
+      })
     : [];
   return {
     headers: parsed.headers,
@@ -277,6 +274,8 @@ export async function commitImport(
       categorizer,
       categoryChoices: m.data.categoryColumn ? c.data : {},
     });
+    // The Recent imports card on /import is server-rendered; refresh so it shows the new batch.
+    refresh();
     return {
       ok: true,
       inserted: out.inserted,
