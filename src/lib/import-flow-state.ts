@@ -8,6 +8,9 @@ import type { CategoryGroup, CategoryOption, FileCategoryChoice } from "./import
  * earlier pick only for groups they actually edited (`touched`) that still exist in the new preview.
  * An "existing" pick whose category is no longer offered (hidden or deleted meanwhile) falls back to
  * the default instead of being sent and rejected.
+ * A kept "Create new" choice keeps the user's name, but its kind follows the new default's guess
+ * (the "money out as positive" toggle flips signs, and with them the guess) unless the user picked
+ * the kind themselves (`kindEdited`).
  */
 export function reconcileChoices(
   groups: Pick<CategoryGroup, "key">[],
@@ -15,13 +18,17 @@ export function reconcileChoices(
   prev: Record<string, FileCategoryChoice>,
   touched: ReadonlySet<string>,
   categories: Pick<CategoryOption, "id">[],
+  kindEdited: ReadonlySet<string> = new Set(),
 ): Record<string, FileCategoryChoice> {
   const offered = new Set(categories.map((c) => c.id));
   const out: Record<string, FileCategoryChoice> = {};
   for (const g of groups) {
     const kept = prev[g.key];
+    const fresh = defaults[g.key];
     const keep = touched.has(g.key) && kept && (kept.type !== "existing" || offered.has(kept.categoryId));
-    out[g.key] = keep ? kept : defaults[g.key];
+    if (!keep) out[g.key] = fresh;
+    else if (kept.type === "new" && fresh.type === "new" && !kindEdited.has(g.key)) out[g.key] = { ...kept, kind: fresh.kind };
+    else out[g.key] = kept;
   }
   return out;
 }
@@ -59,6 +66,11 @@ export const UNNAMED_CATEGORY_HINT = "Name each new category or pick another opt
 /** "1 row" / "3 rows". */
 export function rowsLabel(n: number): string {
   return `${n} ${n === 1 ? "row" : "rows"}`;
+}
+
+/** "was" / "were" to agree with a count: "1 row was skipped", "3 rows were skipped". */
+export function wasWere(n: number): string {
+  return n === 1 ? "was" : "were";
 }
 
 /** Only offer to import without unreadable rows when something is left to import. */

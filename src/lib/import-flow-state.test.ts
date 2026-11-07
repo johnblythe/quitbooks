@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileCategoryChoice } from "./import-categories";
-import { canAcknowledgeErrors, effectiveChoice, reconcileChoices, rowsLabel, unnamedNewCount } from "./import-flow-state";
+import { canAcknowledgeErrors, effectiveChoice, reconcileChoices, rowsLabel, unnamedNewCount, wasWere } from "./import-flow-state";
 
 const inbox: FileCategoryChoice = { type: "inbox" };
 const existing = (id: string): FileCategoryChoice => ({ type: "existing", categoryId: id });
@@ -30,6 +30,39 @@ describe("reconcileChoices (#5 P4-4)", () => {
   it("only returns groups that still exist", () => {
     const out = reconcileChoices([{ key: "b" }], { b: inbox }, { a: existing("c1"), b: inbox }, new Set(["a"]), cats);
     expect(Object.keys(out)).toEqual(["b"]);
+  });
+});
+
+describe("reconcileChoices kind re-guess (#10 R6-6)", () => {
+  const groups = [{ key: "a" }];
+  const mine = (kind: "income" | "expense"): FileCategoryChoice => ({ type: "new", name: "My Name", kind });
+
+  it("re-guesses the kind of a touched Create new when the user never picked a kind, keeping their name", () => {
+    const out = reconcileChoices(groups, { a: { type: "new", name: "Original", kind: "income" } }, { a: mine("expense") }, new Set(["a"]), []);
+    expect(out.a).toEqual({ type: "new", name: "My Name", kind: "income" });
+  });
+  it("keeps a kind the user picked", () => {
+    const out = reconcileChoices(
+      groups,
+      { a: { type: "new", name: "Original", kind: "income" } },
+      { a: mine("expense") },
+      new Set(["a"]),
+      [],
+      new Set(["a"]),
+    );
+    expect(out.a).toEqual(mine("expense"));
+  });
+  it("keeps the touched pick when the new default is not a Create new", () => {
+    const out = reconcileChoices(groups, { a: inbox }, { a: mine("expense") }, new Set(["a"]), []);
+    expect(out.a).toEqual(mine("expense"));
+  });
+});
+
+describe("wasWere", () => {
+  it("agrees with the count", () => {
+    expect(wasWere(1)).toBe("was");
+    expect(wasWere(0)).toBe("were");
+    expect(wasWere(2)).toBe("were");
   });
 });
 
