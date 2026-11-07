@@ -186,21 +186,30 @@ export function joinDescription(name: string, memo: string): string {
 
 const REPORT_FURNITURE = /^(total\b|(cash|accrual) basis\b)/i;
 
+/** A real report label: "Total for X" or a bare "Total". "Total Wine & More" is a merchant, not a label. */
+const REPORT_TOTAL_LABEL = /^total(\s+for\b|\s*$)/i;
+const REPORT_FOOTER = /^(cash|accrual) basis\b/i;
+
 /**
- * Is this record report furniture rather than a transaction? True for "Total for ..." / "TOTAL" rows,
- * the "Cash Basis ..." / "Accrual Basis ..." footer, and rows with no readable date and no amount at
- * all (QuickBooks section headings that carry just an account name). A row with an amount but a
- * bad date is NOT furniture: that is a real parse error.
+ * Is this record report furniture rather than a transaction? True for the "Cash Basis ..." /
+ * "Accrual Basis ..." footer, rows with no amount at all (QuickBooks section headings that carry just
+ * an account name, "Total for ..." rows without a figure), and "Total for X" / bare "Total" rows whose
+ * date cell is blank, plus anything with a "Total ..." label in the date column. A row with an amount
+ * and a bad or blank date is NOT furniture when its payee merely starts with "Total" ("Total Wine"):
+ * that is a real parse error.
  */
 function isReportLine(record: Record<string, string>, mapping: CsvMapping, hasDate: boolean): boolean {
   // A dated bank row is activity even when its payee starts with "Total" and precedes the date.
   if (hasDate) return false;
   const cells = Object.values(record).filter((v): v is string => typeof v === "string");
   const first = cells.map((c) => c.trim()).find(Boolean) ?? "";
-  if (REPORT_FURNITURE.test(first)) return true;
+  if (REPORT_FOOTER.test(first)) return true;
   const amountCols =
     mapping.amountMode === "single" ? [mapping.amountColumn] : [mapping.debitColumn, mapping.creditColumn];
-  return amountCols.every((c) => !(record[c ?? ""] ?? "").trim());
+  if (amountCols.every((c) => !(record[c ?? ""] ?? "").trim())) return true;
+  const dateCell = (record[mapping.dateColumn] ?? "").trim();
+  if (REPORT_FURNITURE.test(dateCell)) return true; // a label in the date column is never a merchant
+  return dateCell === "" && REPORT_TOTAL_LABEL.test(first); // blank date: only "Total for ..." or a bare "TOTAL"
 }
 
 /**

@@ -20,6 +20,7 @@ import {
   type CategoryOption,
   type FileCategoryChoice,
 } from "@/lib/import-categories";
+import { rowsLabel } from "@/lib/import-flow-state";
 import { matchManualEntries } from "@/lib/import-match";
 import { csvCutoverDate } from "@/lib/bank-sync-server";
 import { splitByCutover } from "@/lib/bank-cutover";
@@ -177,10 +178,25 @@ export async function previewImport(text: unknown, mapping: unknown): Promise<Im
 
   const duplicateCount = rows.filter((r) => r.duplicate).length;
   const options: CategoryOption[] = cats.filter((c) => !c.archived);
+  const boothRentCategoryId = cats.find((c) => c.systemKey === BOOTH_RENT_KEY)?.id ?? null;
+  // Remembered choices follow the file's category column even when another saved layout was picked.
+  const remembered =
+    parsed.mapping?.categoryMap ?? (parsed.mapping?.categoryColumn ? (await getSavedMapping(CATEGORIZED_MAPPING_NAME))?.categoryMap : undefined);
   const categoryGroups = parsed.mapping?.categoryColumn
     ? (() => {
-        const groups = summarizeFileCategories(parsed.rows.filter((r) => !dupes.has(r.dedupeHash)));
-        const choices = defaultChoices(groups, options, parsed.mapping.categoryMap);
+        const groups = summarizeFileCategories(
+          parsed.rows
+            .filter((r) => !dupes.has(r.dedupeHash))
+            .map((r) => {
+              const auto = categorizer(r);
+              return {
+                category: r.category,
+                amountCents: r.amountCents,
+                stylistRent: !!boothRentCategoryId && auto.categoryId === boothRentCategoryId && !!auto.stylistId,
+              };
+            }),
+        );
+        const choices = defaultChoices(groups, options, remembered, boothRentCategoryId);
         return groups.map((g) => ({ ...g, choice: choices[g.key] }));
       })()
     : [];
@@ -196,7 +212,7 @@ export async function previewImport(text: unknown, mapping: unknown): Promise<Im
     skippedLines: parsed.skippedLines,
     categoryGroups,
     categories: options,
-    boothRentCategoryId: cats.find((c) => c.systemKey === BOOTH_RENT_KEY)?.id ?? null,
+    boothRentCategoryId,
   };
 }
 
@@ -230,7 +246,7 @@ export async function commitImport(
   if (parsed.errors.length && ackErrors !== true) {
     return {
       ok: false,
-      error: `${parsed.errors.length} rows couldn't be read. Confirm you want to import without them.`,
+      error: `${rowsLabel(parsed.errors.length)} couldn't be read. Confirm you want to import without ${parsed.errors.length === 1 ? "it" : "them"}.`,
     };
   }
 

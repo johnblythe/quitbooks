@@ -76,6 +76,30 @@ describe("placeholders and kinds", () => {
   });
 });
 
+describe("defaultChoice for stylist rent under another QuickBooks name (#5 P4-8)", () => {
+  const rental = (flags: boolean[]) =>
+    summarizeFileCategories(flags.map((f) => ({ category: "Rental Income", amountCents: 35000, stylistRent: f })))[0];
+  it("counts the rows that look like stylist rent", () => {
+    expect(rental([true, true, false]).stylistRentCount).toBe(2);
+  });
+  it("defaults to the existing Booth Rent when most rows match a stylist", () => {
+    expect(defaultChoice(rental([true, true, false]), cats, undefined, "c-booth")).toEqual({ type: "existing", categoryId: "c-booth" });
+  });
+  it("creates a new category when only half or fewer match, or when Booth Rent is unknown", () => {
+    expect(defaultChoice(rental([true, false]), cats, undefined, "c-booth").type).toBe("new");
+    expect(defaultChoice(rental([true, true, true]), cats).type).toBe("new");
+  });
+  it("lets a remembered choice or an exact name match win", () => {
+    const g = rental([true, true]);
+    expect(defaultChoice(g, cats, { [g.key]: { type: "existing", categoryId: "c-supplies" } }, "c-booth")).toEqual({
+      type: "existing",
+      categoryId: "c-supplies",
+    });
+    const named = summarizeFileCategories([{ category: "Supplies", amountCents: -1, stylistRent: true }])[0];
+    expect(defaultChoice(named, cats, undefined, "c-booth")).toEqual({ type: "existing", categoryId: "c-supplies" });
+  });
+});
+
 describe("defaultChoice", () => {
   it("matches an existing category by name, ignoring case", () => {
     expect(defaultChoice(group("booth rent", [100]), cats)).toEqual({ type: "existing", categoryId: "c-booth" });
