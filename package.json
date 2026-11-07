@@ -20,7 +20,8 @@
     "fake:restore": "tsx scripts/fake-restore.ts",
     "fake:score": "tsx scripts/fake-score.ts",
     "user:add": "tsx scripts/add-user.ts",
-    "bank:sync": "tsx --conditions=react-server scripts/bank-sync.ts"
+    "bank:sync": "tsx --conditions=react-server scripts/bank-sync.ts",
+    "qbo:compare": "tsx scripts/qbo-compare.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
