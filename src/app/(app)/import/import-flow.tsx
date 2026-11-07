@@ -1,11 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { commitImport, previewImport, type ImportPreview, type ImportResult } from "@/app/actions/import";
 import { Button, Card, ErrorText, Field, Money, Pill, inputClass } from "@/components/ui";
 import type { CsvMapping } from "@/lib/csv";
 import { guessKind, resolveRowCategory, type CategoryKind, type FileCategoryChoice } from "@/lib/import-categories";
+import {
+  UNNAMED_CATEGORY_HINT,
+  canAcknowledgeErrors,
+  reconcileChoices,
+  rowsLabel,
+  unnamedNewCount,
+} from "@/lib/import-flow-state";
 import { formatDate } from "@/lib/dates";
 import { coveredNote } from "@/lib/bank-cutover";
 import { MAX_CSV_BYTES, TOO_BIG_MESSAGE } from "@/lib/import-limits";
@@ -21,18 +28,23 @@ export function ImportFlow() {
   const [ackErrors, setAckErrors] = useState(false);
   /** What to do with each distinct value of the file's category column, keyed by the server's group key. */
   const [choices, setChoices] = useState<Record<string, FileCategoryChoice>>({});
+  /** Group keys the user edited by hand; only these survive a re-preview. */
+  const touched = useRef<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
 
   function runPreview(text: string, m: CsvMapping | null, resetChoices = false) {
     setError(null);
+    setResult(null);
+    if (resetChoices) touched.current = new Set();
     startTransition(async () => {
       try {
         const p = await previewImport(text, m);
         setPreview(p);
         setMapping(p.mapping);
-        // Keep what the user already picked; only values not seen yet start from the server's default.
+        // Start from the server's defaults; keep only what the user edited, if it still holds.
         const defaults = Object.fromEntries(p.categoryGroups.map((g) => [g.key, g.choice]));
-        setChoices((prev) => (resetChoices ? defaults : { ...defaults, ...prev }));
+        const edited = new Set(touched.current);
+        setChoices((prev) => reconcileChoices(p.categoryGroups, defaults, prev, edited, p.categories));
         setUnlinked(new Set());
         setAckErrors(false);
       } catch {
@@ -45,6 +57,7 @@ export function ImportFlow() {
     setResult(null);
     setPreview(null);
     setChoices({});
+    touched.current = new Set();
     setError(null);
     if (!f) return;
     if (f.size > MAX_CSV_BYTES) {
@@ -79,6 +92,7 @@ export function ImportFlow() {
   const catById = new Map((preview?.categories ?? []).map((c) => [c.id, c]));
 
   function setChoice(key: string, choice: FileCategoryChoice) {
+    touched.current.add(key);
     setChoices((prev) => ({ ...prev, [key]: choice }));
   }
 
@@ -101,10 +115,14 @@ export function ImportFlow() {
     return { category: r.categoryName, stylist: r.stylistName, isNew: false };
   }
   const toInsert = (preview?.newCount ?? 0) - links.length;
-  const canImport = !pending && !!mapping && (preview?.newCount ?? 0) > 0 && (errorCount === 0 || ackErrors);
+  const unnamed = unnamedNewCount(groups, choices);
+  const canImport =
+    !pending && !!mapping && (preview?.newCount ?? 0) > 0 && (errorCount === 0 || ackErrors) && unnamed === 0;
 
   function onCommit() {
     if (!file || !mapping) return;
+    setError(null);
+    setResult(null);
     startTransition(async () => {
       try {
         const sent = Object.fromEntries(groups.map((g) => [g.key, choices[g.key] ?? g.choice]));
@@ -139,7 +157,7 @@ export function ImportFlow() {
         {result.errors.length ? (
           <div className="mt-3 rounded-lg border border-warn/40 p-3 text-sm" role="alert">
             <p className="font-medium text-warn">
-              {result.errors.length} {result.errors.length === 1 ? "row" : "rows"} couldn’t be read and were NOT imported
+              {rowsLabel(result.errors.length)} couldn’t be read and were NOT imported
             </p>
             <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-ink-2">
               {result.errors.map((e, i) => (
@@ -253,6 +271,11 @@ export function ImportFlow() {
                           {g.count} {g.count === 1 ? "row" : "rows"} · <Money cents={g.netCents} signed />
                         </span>
                       </div>
+                      {g.stylistRentCount > 0 ? (
+                        <p className="text-xs text-ink-2">
+                          {g.stylistRentCount} {g.stylistRentCount === 1 ? "row looks" : "rows look"} like stylist rent
+                        </p>
+                      ) : null}
                       <select
                         aria-label={`Category for ${g.value}`}
                         value={selectValue}
@@ -324,7 +347,7 @@ export function ImportFlow() {
             ) : null}
             {errorCount ? (
               <div className="mb-3 rounded-lg border border-warn/40 p-3 text-sm" role="alert">
-                <p className="font-medium text-warn">{errorCount} {errorCount === 1 ? "row" : "rows"} couldn’t be read</p>
+                <p className="font-medium text-warn">{rowsLabel(errorCount)} couldn’t be read</p>
                 <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-ink-2">
                   {preview.errors.slice(0, 100).map((e, i) => (
                     <li key={i}>
@@ -405,7 +428,7 @@ export function ImportFlow() {
             ) : null}
           </Card>
 
-          {errorCount ? (
+          {canAcknowledgeErrors(errorCount, preview.newCount) ? (
             <label className="flex items-start gap-2 rounded-lg border border-warn/40 p-3 text-sm" role="group">
               <input
                 type="checkbox"
@@ -415,12 +438,14 @@ export function ImportFlow() {
               />
               <span>
                 <span className="font-medium text-warn">
-                  {errorCount} {errorCount === 1 ? "row" : "rows"} couldn’t be read.
+                  {rowsLabel(errorCount)} couldn’t be read.
                 </span>{" "}
-                Import without these {errorCount} rows
+                Import without {errorCount === 1 ? "this row" : `these ${errorCount} rows`}
               </span>
             </label>
           ) : null}
+
+          {unnamed ? <p className="text-sm text-warn">{UNNAMED_CATEGORY_HINT}</p> : null}
 
           <Button onClick={onCommit} disabled={!canImport} className="w-full">
             {preview.newCount === 0

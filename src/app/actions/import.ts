@@ -20,6 +20,7 @@ import {
   type CategoryOption,
   type FileCategoryChoice,
 } from "@/lib/import-categories";
+import { rowsLabel } from "@/lib/import-flow-state";
 import { matchManualEntries } from "@/lib/import-match";
 import { csvCutoverDate } from "@/lib/bank-sync-server";
 import { splitByCutover } from "@/lib/bank-cutover";
@@ -245,7 +246,7 @@ export async function commitImport(
   if (parsed.errors.length && ackErrors !== true) {
     return {
       ok: false,
-      error: `${parsed.errors.length} rows couldn't be read. Confirm you want to import without them.`,
+      error: `${rowsLabel(parsed.errors.length)} couldn't be read. Confirm you want to import without ${parsed.errors.length === 1 ? "it" : "them"}.`,
     };
   }
 
