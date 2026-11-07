@@ -2,6 +2,21 @@
 
 ## [Unreleased] — 2026-11-07
 
+### Added
+- `npm run qbo:compare`: a read-only check of our cash-basis P&L against a QuickBooks Online "Profit and Loss by Month" CSV export (#8).
+  - It compares month by month and category by category, and lists the QuickBooks accounts and our transactions (date, amount, description, source) behind every cell that differs.
+  - It also shows the Inbox totals per month, the account mapping (`--map` override, then the import's saved choices, then the same name, then QuickBooks placeholders to the Inbox), and unmapped accounts on both sides.
+  - It ends with `MATCH: <months>` (exit 0) or `N mismatches, total abs diff $X` (exit 1). Options: `--from`, `--to`, `--tolerance-cents`, `--map` and `--out`. An option given an empty value (`--out=`, `--map ""`) is refused, not ignored.
+  - MATCH is only possible when every dollar in the file was read and compared:
+    - section Totals, Gross Profit and Net Income that disagree with the file's own accounts block it, as do a missing Net Income row or an Accrual report;
+    - each month's net is checked against QuickBooks' own Net Income row;
+    - the tolerance applies to month totals too, and differences under it are listed;
+    - months asked for but not in the file, gaps between month columns, and rows the parser can't place (a "Total …" row closing nothing, amounts outside a section or not under a month heading) stop the run with the line number.
+  - It runs inside a `READ ONLY` transaction, so it is safe to run against production. The report names the database it read (host and database name only), and a piped report is never cut off.
+  - The P&L parser (`src/lib/qbo-pnl.ts`) tolerates preamble lines, "Jan 2026" / "January 2026" / partial first or last months, all five sections, "Total X" / "Total for X" rows, and sub-accounts (by Total rows, indentation or `Parent:Child`).
+  - New synthetic fixture `fixtures/qbo-pnl-by-month.sample.csv`, matching the Transaction Detail sample, with an end-to-end test from import through compare.
+  - A README section, "Checking against QuickBooks", covers which reports to export and how to run it.
+
 ### Fixed
 - Import: an undated row whose first cell starts with "Total" but that has an amount is now reported as a parse error instead of silently skipped as report furniture; "Total for ..." rows with a blank or "Total" date cell and the Cash/Accrual Basis footer are still skipped (#5 P4-2).
 - Import: remembered category choices are merged with the stored ones inside the commit transaction (capped at 5000) instead of being replaced by only this file's choices, and the preview uses the remembered map even when another saved column layout was picked (#5 P4-3).
