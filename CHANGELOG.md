@@ -17,7 +17,17 @@
   - New synthetic fixture `fixtures/qbo-pnl-by-month.sample.csv`, matching the Transaction Detail sample, with an end-to-end test from import through compare.
   - A README section, "Checking against QuickBooks", covers which reports to export and how to run it.
 
+### Changed
+- `qbo:compare` exits 2 when it couldn't compare (bad options, a file it can't read, a database error); mismatches still exit 1 and MATCH 0 (#11).
+- `qbo:compare` names the Neon endpoint (`ep-…`) of the database it read, so production and dev can be told apart (#11).
+- `qbo:compare` reads more real-world files: one re-saved in Excel (`Jan-26` headers, ` - ` zeros, `$ (12.00)` negatives), a first column that is blank on every line, the date stamp on its own line after Net Income, and summary rows such as `Net Income (Loss)`, which are cross-checked like the others (#11).
+
 ### Fixed
+- `qbo:compare`: a refund inside a QuickBooks placeholder account (Uncategorized Expense) no longer shows as two false Inbox mismatches. The Inbox is now compared as one net amount per month (#11).
+- `qbo:compare`: a QuickBooks income account mapped to one of our expense categories (or the reverse) can now MATCH. Month income and expenses are counted by our category on both sides (#11).
+- `qbo:compare`: a partial first or last month (`Jan 15-31, 2026`) gets a warning line right above the verdict saying which dates were compared, even when the whole month was asked for (#11).
+- `qbo:compare`: clearer messages for text in a column with no heading and for an unknown summary row, instead of a hint about thousands separators (#11).
+- `qbo:compare` won't print part of a malformed `DATABASE_URL`'s user or password in the report header (#11).
 - Import: an undated row whose first cell starts with "Total" but that has an amount is now reported as a parse error instead of silently skipped as report furniture; "Total for ..." rows with a blank or "Total" date cell and the Cash/Accrual Basis footer are still skipped (#5 P4-2).
 - Import: remembered category choices are merged with the stored ones inside the commit transaction (capped at 5000) instead of being replaced by only this file's choices, and the preview uses the remembered map even when another saved column layout was picked (#5 P4-3).
 - Import: re-previewing (changing a column) restarts from the server's defaults and keeps only the category choices you actually edited, dropping any pick whose category was hidden or deleted; a new file or a changed category column resets them (#5 P4-4).
