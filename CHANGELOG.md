@@ -6,7 +6,7 @@
 - `npm run qbo:compare`: a read-only check of our cash-basis P&L against a QuickBooks Online "Profit and Loss by Month" CSV export (#8).
   - It compares month by month and category by category, and lists the QuickBooks accounts and our transactions (date, amount, description, source) behind every cell that differs.
   - It also shows the Inbox totals per month, the account mapping (`--map` override, then the import's saved choices, then the same name, then QuickBooks placeholders to the Inbox), and unmapped accounts on both sides.
-  - It ends with `MATCH: <months>` (exit 0) or `N mismatches, total abs diff $X` (exit 1). Options: `--from`, `--to`, `--tolerance-cents`, `--map` and `--out`.
+  - It ends with `MATCH: <months>` (exit 0) or `N mismatches, total abs diff $X` (exit 1). Options: `--from`, `--to`, `--tolerance-cents`, `--map` and `--out`. An option given an empty value (`--out=`, `--map ""`) is refused, not ignored.
   - MATCH is only possible when every dollar in the file was read and compared:
     - section Totals, Gross Profit and Net Income that disagree with the file's own accounts block it, as do a missing Net Income row or an Accrual report;
     - each month's net is checked against QuickBooks' own Net Income row;

@@ -401,6 +401,12 @@ describe("parseCompareArgs", () => {
     [["a.csv", "--tolerance-cents", "0.5"], /whole number of cents/],
     [["a.csv", "--from", "2026-05", "--to", "2026-01"], /is after/],
     [["a.csv", "--frmo", "2026-01"], /Unknown option --frmo/],
+    [["a.csv", "--out="], /--out was given an empty value/],
+    [["a.csv", "--out", ""], /--out was given an empty value/],
+    [["a.csv", "--map="], /--map was given an empty value/],
+    [["a.csv", "--map", ""], /--map was given an empty value/],
+    [["a.csv", "--map", "   "], /--map was given an empty value/],
+    [["a.csv", "--from="], /--from was given an empty value/],
   ])("refuses %j", (argv, message) => {
     expect(() => parseCompareArgs(argv as string[])).toThrow(message);
   });

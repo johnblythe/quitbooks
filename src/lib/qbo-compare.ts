@@ -600,6 +600,9 @@ export function parseCompareArgs(argv: string[]): CompareArgs {
     const value = () => {
       const v = inline ?? argv[++i];
       if (v === undefined || (inline === undefined && v.startsWith("--"))) throw new QboCompareInputError(`${flag} needs a value. ${USAGE}`);
+      // An empty value (`--out=`, `--map ""`, an unset shell variable) must not quietly drop the
+      // option: a stale report.md or a missing --map would then pass for this run's result.
+      if (!v.trim()) throw new QboCompareInputError(`${flag} was given an empty value. Pass a file name, or leave ${flag} out.`);
       return v;
     };
     const month = () => {

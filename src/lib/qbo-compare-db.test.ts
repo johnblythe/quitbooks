@@ -474,6 +474,17 @@ describe("the CLI (npm run qbo:compare)", () => {
     expect(r.last).toBe("2 mismatches (1 month total, 1 problem in the QuickBooks file), total abs diff $41.00");
   }, 60_000);
 
+  it("exits 1 on an empty --out or --map instead of ignoring it, and leaves an old report alone", () => {
+    const stale = file("report.md", "MATCH: from an earlier run\n");
+    for (const args of [["--out="], ["--out", ""], ["--map="], ["--map", ""]]) {
+      const r = cli(["fixtures/qbo-pnl-by-month.sample.csv", ...args]);
+      expect(r.code).toBe(1);
+      expect(r.out).toBe("");
+      expect(r.err).toMatch(/--(out|map) was given an empty value/);
+    }
+    expect(readFileSync(stale, "utf8")).toBe("MATCH: from an earlier run\n");
+  }, 60_000);
+
   it("exits 1 with a message for months the file doesn't have", () => {
     const r = cli(["fixtures/qbo-pnl-by-month.sample.csv", "--to", "2025-06"]);
     expect(r.code).toBe(1);
