@@ -148,3 +148,29 @@ export function resolveRowCategory(
   }
   return { categoryId: fileCategoryId, stylistId: null };
 }
+
+/**
+ * The category groups shown on the mapping step, each with its starting choice. `rows` carries each
+ * row's automatic categorization (rules and stylist matching) so it is computed once, not twice.
+ * Rows already in the ledger are left out of the counts, and only money in that the categorizer
+ * sent to Booth Rent with a stylist counts as stylist rent. Remembered choices beat the Booth Rent default.
+ */
+export function buildCategoryGroups(input: {
+  rows: { category: string; amountCents: number; duplicate: boolean; auto: { categoryId: string | null; stylistId: string | null } }[];
+  options: CategoryOption[];
+  remembered?: Record<string, SavedCategoryChoice>;
+  boothRentCategoryId: string | null;
+}): (CategoryGroup & { choice: FileCategoryChoice })[] {
+  const { rows, options, remembered, boothRentCategoryId } = input;
+  const groups = summarizeFileCategories(
+    rows
+      .filter((r) => !r.duplicate)
+      .map((r) => ({
+        category: r.category,
+        amountCents: r.amountCents,
+        stylistRent: r.amountCents > 0 && !!boothRentCategoryId && r.auto.categoryId === boothRentCategoryId && !!r.auto.stylistId,
+      })),
+  );
+  const choices = defaultChoices(groups, options, remembered, boothRentCategoryId);
+  return groups.map((g) => ({ ...g, choice: choices[g.key] }));
+}
