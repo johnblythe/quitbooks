@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased] — 2026-11-07
+
+### Fixed
+- Import: an undated row whose first cell starts with "Total" but that has an amount is now reported as a parse error instead of silently skipped as report furniture; "Total for ..." rows with a blank or "Total" date cell and the Cash/Accrual Basis footer are still skipped (#5 P4-2).
+- Import: remembered category choices are merged with the stored ones inside the commit transaction (capped at 5000) instead of being replaced by only this file's choices, and the preview uses the remembered map even when another saved column layout was picked (#5 P4-3).
+- Import: re-previewing (changing a column) restarts from the server's defaults and keeps only the category choices you actually edited, dropping any pick whose category was hidden or deleted; a new file or a changed category column resets them (#5 P4-4).
+- Import: a "Create new" category with a blank name disables Import and shows "Name each new category or pick another option." (#5 P4-6).
+- Import: a failed import's error and an earlier failed result are cleared when you retry or re-preview (#5 P4-7).
+- Import: a QuickBooks category that is really stylist rent under another name (most rows already match a stylist) defaults to the existing Booth Rent instead of "Create new", and any group with stylist matches says "N rows look like stylist rent" (#5 P4-8).
+- Import: the QuickBooks help says to export dates before the bank feed starts, since rows on or after the feed's start date are skipped (#5 P4-9).
+- Import: a refused file with nothing importable no longer offers "Import without these N rows", and "1 row" is singular everywhere (#5).
+
 ## Release integration — 2026-10-31
 
 - Import mapping review: dated transactions whose payee starts with "Total" are never skipped as report totals; categories hidden after preview are rejected atomically; failed imports keep their file and choices for correction and retry.
