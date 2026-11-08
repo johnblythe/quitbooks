@@ -28,6 +28,7 @@
   - The P&L parser (`src/lib/qbo-pnl.ts`) tolerates preamble lines, "Jan 2026" / "January 2026" / partial first or last months, all five sections, "Total X" / "Total for X" rows, and sub-accounts (by Total rows, indentation or `Parent:Child`).
   - New synthetic fixture `fixtures/qbo-pnl-by-month.sample.csv`, matching the Transaction Detail sample, with an end-to-end test from import through compare.
   - A README section, "Checking against QuickBooks", covers which reports to export and how to run it.
+- `qbo:compare` warns about "Mappings to spot-check": QuickBooks accounts mapped to one of our categories of the other kind (an income account mapped to an expense category, or the reverse) that have money in the compared months. Equal amounts in and out can cancel inside that category and still match, so the report lists them and the verdict line adds `; N mappings to spot-check`. Report-only: MATCH and the exit code don't change (#11).
 
 ### Changed
 - `qbo:compare` exits 2 when it couldn't compare (bad options, a file it can't read, a database error); mismatches still exit 1 and MATCH 0 (#11).

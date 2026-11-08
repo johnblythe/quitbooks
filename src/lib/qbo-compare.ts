@@ -257,6 +257,21 @@ export function checkMonthAddsUp(label: string, qbo: Buckets, ours: Buckets): vo
 
 export type InboxMonth = { month: MonthKey; column: QboColumn; inCents: number; inCount: number; outCents: number; outCount: number };
 
+/**
+ * A QuickBooks account counted against one of our categories of the other kind (an Income account
+ * mapped to an expense category, or the reverse). Its money nets inside that category's cell, so an
+ * equal amount in and out can cancel there and still match: worth a spot-check, never a mismatch.
+ */
+export type CrossDirectionMapping = {
+  /** Full QuickBooks name. */
+  account: string;
+  section: QboSection;
+  categoryName: string;
+  categoryKind: CategoryKind;
+  /** The amount QuickBooks shows (positive), for each compared month where the account has money. */
+  months: { month: MonthKey; label: string; cents: number }[];
+};
+
 export type CompareResult = {
   columns: QboColumn[];
   toleranceCents: number;
@@ -283,6 +298,8 @@ export type CompareResult = {
   /** Our income/expense categories with money in range that no QuickBooks account maps to. */
   unmatchedCategories: { category: OurCategory; cents: number }[];
   warnings: string[];
+  /** Accounts with money in range mapped to a category of the other kind. Report-only: never affects `match`. */
+  crossDirection: CrossDirectionMapping[];
 };
 
 export function compareBooks(input: {
@@ -444,6 +461,21 @@ export function compareBooks(input: {
       cents: cells.filter((x) => x.key === category.id).reduce((s, x) => s + x.ours, 0),
     }));
 
+  // Inbox mappings are covered by the Inbox gross check and transfer targets already mismatch.
+  const crossDirection: CrossDirectionMapping[] = [];
+  for (const m of mappings) {
+    if (m.target?.type !== "category") continue;
+    const cat = byId.get(m.target.categoryId)!;
+    if (cat.kind === "transfer" || cat.kind === sectionDirection(m.account.section)) continue;
+    const withMoney = pnl.columns.flatMap((col) => {
+      const cents = m.account.cents[col.month] ?? 0;
+      return cents ? [{ month: col.month, label: col.label, cents }] : [];
+    });
+    if (withMoney.length) {
+      crossDirection.push({ account: m.fullName, section: m.account.section, categoryName: cat.name, categoryKind: cat.kind, months: withMoney });
+    }
+  }
+
   return {
     columns: pnl.columns,
     toleranceCents: tolerance,
@@ -461,6 +493,7 @@ export function compareBooks(input: {
     unmapped: mappings.filter((m) => !m.target && hasMoney(m)),
     unmatchedCategories,
     warnings,
+    crossDirection,
   };
 }
 
@@ -489,15 +522,18 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * tolerance and the QuickBooks file has no problems; it names the months it covers.
  */
 export function mismatchSummary(
-  r: Pick<CompareResult, "columns" | "mismatches" | "withinTolerance" | "monthMismatches" | "problems" | "totalAbsDiff" | "toleranceCents" | "match">,
+  r: Pick<CompareResult, "columns" | "mismatches" | "withinTolerance" | "monthMismatches" | "problems" | "totalAbsDiff" | "toleranceCents" | "match"> &
+    Partial<Pick<CompareResult, "crossDirection">>,
 ): string {
   const within = r.withinTolerance.length
     ? `; ${plural(r.withinTolerance.length, "cell")} within the ${money(r.toleranceCents)} tolerance (sum ${money(r.withinTolerance.reduce((s, c) => s + Math.abs(c.diff), 0))})`
     : "";
+  // A report-only note: it never changes the verdict or the exit code.
+  const cross = r.crossDirection?.length ? `; ${plural(r.crossDirection.length, "mapping")} to spot-check (see "Mappings to spot-check")` : "";
   if (r.match) {
     const first = r.columns[0];
     const last = r.columns[r.columns.length - 1];
-    return `MATCH: ${first.label} to ${last.label} (${plural(r.columns.length, "month")})${within}`;
+    return `MATCH: ${first.label} to ${last.label} (${plural(r.columns.length, "month")})${within}${cross}`;
   }
   const n = r.mismatches.length + r.monthMismatches.length + r.problems.length;
   const parts = [
@@ -506,7 +542,7 @@ export function mismatchSummary(
     r.problems.length ? plural(r.problems.length, "problem") + " in the QuickBooks file" : "",
   ].filter(Boolean);
   const breakdown = r.monthMismatches.length || r.problems.length ? ` (${parts.join(", ")})` : "";
-  return `${plural(n, "mismatch", "mismatches")}${breakdown}, total abs diff ${money(r.totalAbsDiff)}${within}`;
+  return `${plural(n, "mismatch", "mismatches")}${breakdown}, total abs diff ${money(r.totalAbsDiff)}${within}${cross}`;
 }
 
 /**
@@ -587,6 +623,19 @@ export function formatReport(
   if (r.warnings.length) {
     out.push("## Warnings", "");
     for (const w of r.warnings) out.push(`- ${w}`);
+    out.push("");
+  }
+
+  if (r.crossDirection.length) {
+    out.push(`## Mappings to spot-check (${r.crossDirection.length})`, "");
+    out.push(
+      "These QuickBooks accounts are counted against one of our categories of the other kind (income against an expense category, or the reverse). Equal amounts in and out can cancel inside that category and still match, while QuickBooks' gross income and expenses stay above ours. Check that our books really hold these transactions.",
+      "",
+    );
+    for (const x of r.crossDirection) {
+      const amounts = x.months.map((mo) => `${mo.label} ${money(mo.cents)}`).join(", ");
+      out.push(`- ${x.account} (${SECTION_LABEL[x.section]}) → ${x.categoryName} (${x.categoryKind}): ${amounts}`);
+    }
     out.push("");
   }
 
