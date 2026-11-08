@@ -264,6 +264,14 @@ describe("compareBooks", () => {
       }
     });
 
+    it("counts the gross check as a month mismatch even when the month also has mismatched cells", () => {
+      const r = compareBooks({ pnl: bounced, categories: cats, lines: lines([tx("2026-01-05", 10100, "c-rent"), tx("2026-01-20", -4000, "c-util")]) });
+      expect(r.mismatches.map((c) => [c.key, c.diff])).toEqual([["c-rent", 100]]);
+      expect(r.months[0]).toMatchObject({ status: "mismatch", diff: 100 });
+      expect(r.monthMismatches).toHaveLength(1);
+      expect(mismatchSummary(r)).toBe("2 mismatches (1 cell, 1 month total), total abs diff $2.00");
+    });
+
     it("matches the same file when both rows are in our Inbox, and allows the tolerance", () => {
       const both = [...sorted, tx("2026-01-10", 50000, null), tx("2026-01-11", -50000, null)];
       const r = compareBooks({ pnl: bounced, categories: cats, lines: lines(both) });
@@ -618,6 +626,11 @@ describe("describeDatabase", () => {
     const d = describeDatabase(url);
     expect(d).toBe("unknown (DATABASE_URL isn't a URL)");
     for (const f of fragments) expect(d).not.toContain(f);
+  });
+
+  it("treats an '@' with no user as misread too, since it can't be told apart from one", () => {
+    expect(databaseUrlMisread("postgresql://@ep-cool-dew-a1b2c3.us-east-1.aws.neon.tech/quitbooks")).toBe(true);
+    expect(databaseUrlMisread("postgresql://:pw@db.example.com/quitbooks")).toBe(true);
   });
 
   it("doesn't call a well-formed URL misread", () => {
