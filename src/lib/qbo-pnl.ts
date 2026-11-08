@@ -9,21 +9,26 @@
  * The layout is written from memory and unverified against a real export. What it assumes:
  * - Preamble lines (company, report title, date range, "Cash Basis") come before a header row whose
  *   cells after the first are month labels plus an optional "Total" column, e.g. `,Jan 2026,...,Total`.
- *   Labels may be "Jan 2026", "January 2026" or a partial month such as "Oct 1-15, 2026". Months are
- *   consecutive; only the first and last may be partial.
- * - The first column holds the row label; amounts sit under the month headers and nowhere else.
+ *   Labels may be "Jan 2026", "January 2026", Excel's "Jan-26" / "Jan 26", or a partial month such as
+ *   "Oct 1-15, 2026". Months are consecutive; only the first and last may be partial.
+ * - The first column holds the row label; amounts sit under the month headers and nowhere else. A
+ *   column that is blank on every line (e.g. a leading empty column) is dropped first.
  * - Sections are headings with no amounts (Income, Cost of Goods Sold, Expenses, Other Income,
  *   Other Expenses), each closed by "Total X" or "Total for X".
  * - A parent account with sub-accounts is a heading (with or without its own amounts) closed by its
  *   own Total row, or is shown by indentation, or the account name is written "Parent:Child".
- * - Gross Profit, Net Operating Income, Net Other Income and Net Income are summary rows: kept as
- *   cross-checks, never as accounts.
- * - Income and expense amounts are both positive; a refund in an expense account is negative.
- * - The "Cash Basis ..." footer comes after the last section.
+ * - Gross Profit, Net Operating Income, Net Other Income and Net Income (each optionally followed by
+ *   "(Loss)") are summary rows: kept as cross-checks, never as accounts.
+ * - Income and expense amounts are both positive; a refund in an expense account is negative. After
+ *   a round trip through Excel, a cell that is only a dash (" - ", "$ -") is zero, and "$ (12.00)" is
+ *   negative.
+ * - The "Cash Basis ..." footer comes after the last section. Its date stamp may be on a line of its
+ *   own after Net Income.
  * - The Total column is ignored for the comparison (it's recomputed), but checked against the months.
  */
 import Papa from "papaparse";
 import { addMonths, monthEnd, type IsoDate, type MonthKey } from "./dates";
+import { categoryKey } from "./import-categories";
 import { formatCents, parseAmountToCents } from "./money";
 
 export type QboSection = "income" | "cogs" | "expenses" | "otherIncome" | "otherExpenses";
@@ -101,16 +106,20 @@ const pad = (n: number) => String(n).padStart(2, "0");
 /**
  * A month column header, or why it can't be one. Null when the text isn't month-shaped at all.
  * Accepts "Jan 2026", "January 2026", "Sept 2026", "Oct 1-15, 2026", "Oct 1 - Oct 15, 2026" and
- * "Oct 1, 2026" (one day).
+ * "Oct 1, 2026" (one day). Also the month-year forms a file gets when it is opened and re-saved in
+ * Excel: "Jan-2026", and Excel's "mmm-yy", "Jan-26" or "Jan 26". A two-digit year is 20xx and needs
+ * a 3-letter month, so "November 17" from an unquoted date stamp isn't read as November 2017. The
+ * column checks still apply.
  */
 export function parseColumnLabel(raw: string): { column: QboColumn } | { error: string } | null {
   const label = raw.replace(/\s+/g, " ").trim();
 
-  const whole = /^([A-Za-z]+)\.? (\d{4})$/.exec(label);
+  const whole = /^([A-Za-z]+)\.?[ -](\d{4})$/.exec(label) ?? /^([A-Za-z]{3})[ -](\d{2})$/.exec(label);
   if (whole) {
     const mo = monthNumber(whole[1]);
     if (!mo) return null;
-    const month = `${whole[2]}-${pad(mo)}`;
+    const year = whole[2].length === 2 ? `20${whole[2]}` : whole[2];
+    const month = `${year}-${pad(mo)}`;
     return { column: { label, month, from: `${month}-01`, to: monthEnd(month), partial: false } };
   }
 
@@ -133,10 +142,6 @@ export function parseColumnLabel(raw: string): { column: QboColumn } | { error: 
   return { column: { label, month, from, to, partial: !(d1 === 1 && d2 === last) } };
 }
 
-function nameKey(s: string): string {
-  return s.replace(/\s+/g, " ").trim().toLowerCase();
-}
-
 const SECTION_NAMES: Record<string, QboSection> = {
   income: "income",
   "cost of goods sold": "cogs",
@@ -149,12 +154,17 @@ const SECTION_NAMES: Record<string, QboSection> = {
   "other expense": "otherExpenses",
 };
 
+// Each may end in "(Loss)" or "(Income)", e.g. "Net Income (Loss)". Accepting more spellings can't
+// lose money: summary rows never become accounts, and each one is cross-checked against the accounts.
+const OR_LOSS = String.raw`(?:\s*\((?:income|loss)\))?`;
 const CHECKS: [RegExp, QboCheckName][] = [
-  [/^gross profit$/i, "Gross Profit"],
-  [/^net operating (income|loss)$/i, "Net Operating Income"],
-  [/^net other (income|loss)$/i, "Net Other Income"],
-  [/^net (income|loss)$/i, "Net Income"],
+  [new RegExp(`^gross profit${OR_LOSS}$`, "i"), "Gross Profit"],
+  [new RegExp(`^net operating (?:income|loss)${OR_LOSS}$`, "i"), "Net Operating Income"],
+  [new RegExp(`^net other (?:income|loss)${OR_LOSS}$`, "i"), "Net Other Income"],
+  [new RegExp(`^net (?:income|loss)${OR_LOSS}$`, "i"), "Net Income"],
 ];
+/** Starts like a summary row but isn't one we know, so it couldn't be cross-checked. */
+const SUMMARY_LIKE = /^(?:net|gross)\b/i;
 
 const BASIS = /^(cash|accrual) basis\b/i;
 const TOTAL = /^total(?:\s+for)?\s+(.+)$/i;
@@ -170,49 +180,97 @@ type Row = {
   hasAmounts: boolean;
   /** The Total column's amount, or null when blank. */
   totalCell: number | null;
-  /** Why the row's cells can't be read as amounts (thrown unless the row turns out to be the footer). */
+  /**
+   * Why the row's cells can't be read as amounts. Thrown, unless the row is skipped before that: the
+   * "Cash Basis ..." footer with no amounts, or a date stamp after Net Income outside any section.
+   */
   bad: string | null;
   /** Set on "Total X" / "Total for X" rows. */
   totalName: string | null;
+  /** The whole line is a date stamp (see isDateStamp). */
+  stamp: boolean;
   blank: boolean;
 };
+
+/**
+ * One amount cell. A file re-saved in Excel can carry its accounting format, which writes zero as a
+ * lone dash (" - ", "$ -") and a negative as "$ (12.00)". Only a cell that is nothing but the dash
+ * (with spaces or a "$") is zero; everything else goes through parseAmountToCents.
+ */
+export function parseCellAmount(text: string): number | null {
+  const t = text.trim();
+  if (/^\$?\s*[-–—]\s*$/.test(t)) return 0;
+  const dollarParens = /^\$\s*(\(.*\))$/.exec(t);
+  return parseAmountToCents(dollarParens ? dollarParens[1] : t);
+}
+
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/**
+ * The line is the report's date stamp, e.g. "Saturday, November 7, 2026 10:15 AM GMT-05:00" (some
+ * exports put it on its own line after "Cash Basis"). Unquoted, its commas split it across the
+ * amount columns, so it is recognised from the whole line put back together.
+ */
+function isDateStamp(cells: string[]): boolean {
+  const text = cells.join(",").replace(/[,\s]+$/, "").replace(/\s+/g, " ").trim();
+  const m =
+    /^(?:([A-Za-z]+), ?)?([A-Za-z]+)\.? (\d{1,2}), ?(\d{4})(?: \d{1,2}:\d{2}(?::\d{2})? ?(?:[AP]M)?)?(?: (?:GMT|UTC)?[+-]\d{1,2}(?::?\d{2})?| [A-Z]{2,5})?$/i.exec(
+      text,
+    );
+  const weekday = (w: string) => WEEKDAYS.some((d) => d === w.toLowerCase() || d.slice(0, 3) === w.toLowerCase());
+  return !!m && (!m[1] || weekday(m[1])) && monthNumber(m[2]) !== null && Number(m[3]) >= 1 && Number(m[3]) <= 31;
+}
 
 type Frame =
   | { kind: "section"; section: QboSection; label: string; line: number; sum: number[] }
   | { kind: "group"; label: string; path: string[]; line: number; sum: number[]; closeBy: "total" | "indent"; indent: number };
 
+/**
+ * The header is the first line whose cells after the first are all month labels or "Total", with at
+ * least one month. An unquoted date stamp that only looks like one ("Nov 17" reads as a month) is
+ * passed over; its problem is what's reported if no header follows, or if any amount sits between it
+ * and the header (that money would go unread). Any other header-like line with a bad column is refused.
+ */
 function findHeader(rows: string[][]): { index: number; columns: { col: number; column: QboColumn }[]; totalCol: number | null } {
-  let firstError: string | null = null;
+  let firstError: { index: number; message: string } | null = null;
   for (let i = 0; i < Math.min(rows.length, 40); i++) {
     const cells = rows[i].map((c) => c.trim());
     const results = cells.map((text, col) => ({ col, text, res: col > 0 && text ? parseColumnLabel(text) : null }));
     if (!results.some((r) => r.res && "column" in r.res)) {
       const bad = results.find((r) => r.res && "error" in r.res)?.res as { error: string } | undefined;
-      if (bad && !firstError) firstError = `Line ${i + 1}: ${bad.error}`;
+      if (bad && !firstError) firstError = { index: i, message: `Line ${i + 1}: ${bad.error}` };
       continue;
     }
     const columns: { col: number; column: QboColumn }[] = [];
     let totalCol: number | null = null;
+    let problem: string | null = null;
     for (const r of results.slice(1)) {
       if (!r.text) continue;
       if (/^total$/i.test(r.text)) {
-        if (totalCol !== null) throw new QboPnlParseError(`Line ${i + 1} has two "Total" columns.`);
+        if (totalCol !== null) problem ??= `Line ${i + 1} has two "Total" columns.`;
         totalCol = r.col;
-        continue;
+      } else if (!r.res) {
+        problem ??= `Line ${i + 1}, column ${r.col + 1}: the header "${r.text}" isn't a month. Expected labels like "Jan 2026", "January 2026" or "Oct 1-15, 2026". Run Profit and Loss with columns by Months.`;
+      } else if ("error" in r.res) {
+        problem ??= `Line ${i + 1}: ${r.res.error}`;
+      } else {
+        columns.push({ col: r.col, column: r.res.column });
       }
-      if (!r.res) {
-        throw new QboPnlParseError(
-          `Line ${i + 1}, column ${r.col + 1}: the header "${r.text}" isn't a month. Expected labels like "Jan 2026", "January 2026" or "Oct 1-15, 2026". Run Profit and Loss with columns by Months.`,
-        );
-      }
-      if ("error" in r.res) throw new QboPnlParseError(`Line ${i + 1}: ${r.res.error}`);
-      columns.push({ col: r.col, column: r.res.column });
+    }
+    if (problem) {
+      // Only a date stamp is passed over; any other header-like line is the header, with a bad column.
+      if (!isDateStamp(rows[i])) throw new QboPnlParseError(problem);
+      firstError ??= { index: i, message: problem };
+      continue;
+    }
+    if (firstError && rows.slice(firstError.index + 1, i).some((r) => r.slice(1).some((c) => c.trim() && parseCellAmount(c) !== null))) {
+      throw new QboPnlParseError(firstError.message);
     }
     checkContiguous(columns.map((c) => c.column), i + 1);
     return { index: i, columns, totalCol };
   }
   throw new QboPnlParseError(
-    firstError ??
+    firstError?.message ??
       `Couldn't find the header row with the month columns (like ",Jan 2026,Feb 2026,...,Total"). Run Profit and Loss with columns by Months, Cash basis, and export it to CSV.`,
   );
 }
@@ -243,6 +301,11 @@ function checkContiguous(columns: QboColumn[], line: number) {
 export function parseQboPnl(text: string): QboPnl {
   const raw = Papa.parse<string[]>(text.replace(/^\uFEFF/, ""), { skipEmptyLines: false }).data;
   const rows = raw.map((r) => (Array.isArray(r) ? r.map((c) => (typeof c === "string" ? c : "")) : []));
+  // A first column that is blank on every line (e.g. from a spreadsheet) holds nothing: drop it, so
+  // the labels are back in the first column.
+  while (rows.some((r) => r.length > 1) && rows.every((r) => !(r[0] ?? "").trim())) {
+    for (let i = 0; i < rows.length; i++) rows[i] = rows[i].slice(1);
+  }
   const header = findHeader(rows);
   const columns = header.columns.map((c) => c.column);
   const months = columns.map((c) => c.month);
@@ -272,17 +335,21 @@ export function parseQboPnl(text: string): QboPnl {
     // would otherwise be misread or dropped without a trace.
     const strayCol = cells.findIndex((c, col) => !known.has(col) && c.trim() !== "");
     if (strayCol >= 0) {
-      bad = `"${cells[strayCol].trim()}" in column ${strayCol + 1} isn't under a month heading. Amounts must line up with the header, and a thousands separator must be quoted ("1,800.00"). Export the report again.`;
+      const stray = cells[strayCol].trim();
+      bad =
+        parseCellAmount(stray) === null
+          ? `"${stray}" in column ${strayCol + 1} has no heading above it. Account names must be in the first column and amounts under the month headings. Export the report from QuickBooks again.`
+          : `"${stray}" in column ${strayCol + 1} isn't under a month heading. Amounts must line up with the header, and a thousands separator must be quoted ("1,800.00"). Export the report again.`;
     }
     const amounts = header.columns.map(({ col, column }) => {
       const t = (cells[col] ?? "").trim();
       if (!t) return null;
-      const cents = parseAmountToCents(t);
+      const cents = parseCellAmount(t);
       if (cents === null) bad ??= `"${t}" under ${column.label} isn't an amount.`;
       return cents;
     });
     const totalText = header.totalCol === null ? "" : (cells[header.totalCol] ?? "").trim();
-    const totalCell = totalText ? parseAmountToCents(totalText) : null;
+    const totalCell = totalText ? parseCellAmount(totalText) : null;
     if (totalText && totalCell === null) bad ??= `"${totalText}" in the Total column isn't an amount.`;
     const total = TOTAL.exec(label);
     return {
@@ -295,6 +362,7 @@ export function parseQboPnl(text: string): QboPnl {
       totalCell,
       bad,
       totalName: total ? total[1].trim() : null,
+      stamp: isDateStamp(cells),
       blank: !first,
     };
   });
@@ -304,11 +372,12 @@ export function parseQboPnl(text: string): QboPnl {
   const sections: QboSection[] = [];
   const stack: Frame[] = [];
   const zeros = () => columns.map(() => 0);
+  let netIncomeSeen = false;
 
   const frameNames = (f: Frame): string[] =>
-    f.kind === "section" ? [] : [nameKey(f.label), nameKey(f.path[f.path.length - 1]), nameKey(f.path.join(":"))];
+    f.kind === "section" ? [] : [categoryKey(f.label), categoryKey(f.path[f.path.length - 1]), categoryKey(f.path.join(":"))];
   const closes = (totalName: string, f: Frame) =>
-    f.kind === "section" ? SECTION_NAMES[nameKey(totalName)] === f.section : frameNames(f).includes(nameKey(totalName));
+    f.kind === "section" ? SECTION_NAMES[categoryKey(totalName)] === f.section : frameNames(f).includes(categoryKey(totalName));
   /** Index of the next row at or after `from` that is a Total row whose name passes `test`, else -1. */
   const nextTotal = (from: number, test: (name: string) => boolean) => {
     for (let j = from; j < body.length; j++) if (body[j].totalName && test(body[j].totalName!)) return j;
@@ -350,12 +419,16 @@ export function parseQboPnl(text: string): QboPnl {
     const r = body[i];
     if (r.blank) continue;
     // The footer ("Cash Basis Saturday, November 7, 2026 ...") comes after the last section and may be
-    // unquoted, spilling into the amount columns, so its cells are not read.
+    // unquoted, spilling date text into the amount columns, so its bad cells are not read. One with
+    // amounts ("Cash Basis Adjustment,500.00") is not the footer: it goes on to fail below.
     const footer = BASIS.exec(r.first);
-    if (footer && !stack.length) {
+    if (footer && !stack.length && !r.hasAmounts) {
       basis = footer[1].toLowerCase() as "cash" | "accrual";
       continue;
     }
+    // The footer's date stamp on a line of its own. Skipped only after Net Income and outside any
+    // section, where nothing is part of the report's totals.
+    if (r.stamp && !stack.length && netIncomeSeen) continue;
     if (r.bad) fail(r.line, r.bad);
     if (footer) {
       if (r.hasAmounts) fail(r.line, `"${r.label}" has amounts but looks like the "${footer[0]}" footer. Rename the account in QuickBooks so it doesn't start with "${footer[0]}", then export again.`);
@@ -400,10 +473,11 @@ export function parseQboPnl(text: string): QboPnl {
     if (check && (!stack.length || sectionIsDangling(i))) {
       if (stack.length) closeDangling();
       checks.push({ name: check[1], line: r.line, cents: toRecord(r.amounts.map((a) => a ?? 0)) });
+      if (check[1] === "Net Income") netIncomeSeen = true;
       continue;
     }
 
-    const heading = SECTION_NAMES[nameKey(r.label)];
+    const heading = SECTION_NAMES[categoryKey(r.label)];
     if (heading && !r.hasAmounts && (!stack.length || (heading !== sectionFrame()?.section && sectionIsDangling(i)))) {
       if (stack.length) closeDangling();
       stack.push({ kind: "section", section: heading, label: r.label, line: r.line, sum: zeros() });
@@ -413,6 +487,12 @@ export function parseQboPnl(text: string): QboPnl {
 
     const section = sectionFrame();
     if (!section) {
+      if (r.hasAmounts && SUMMARY_LIKE.test(r.label)) {
+        fail(
+          r.line,
+          `"${r.label}" has amounts and looks like a summary row, but isn't one this tool knows (Gross Profit, Net Operating Income, Net Other Income, Net Income), so it can't be checked against the accounts.`,
+        );
+      }
       if (r.hasAmounts) {
         fail(
           r.line,
@@ -430,14 +510,14 @@ export function parseQboPnl(text: string): QboPnl {
     const parent = [...stack].reverse().find((f): f is Extract<Frame, { kind: "group" }> => f.kind === "group");
     const base = parent?.path ?? [];
     const parts = r.label.split(":").map((p) => p.trim()).filter(Boolean);
-    const startsWithBase = parts.length > base.length && base.every((b, k) => nameKey(b) === nameKey(parts[k]));
+    const startsWithBase = parts.length > base.length && base.every((b, k) => categoryKey(b) === categoryKey(parts[k]));
     const path = parts.length > 1 && startsWithBase ? parts : [...base, ...parts];
 
     const enclosing = stack[stack.length - 1];
     const stop =
       enclosing.kind === "group" && enclosing.closeBy === "indent" ? body.length : nextTotal(i + 1, (n) => closes(n, enclosing));
-    const ownNames = [nameKey(r.label), nameKey(path[path.length - 1]), nameKey(path.join(":"))];
-    const ownTotal = nextTotal(i + 1, (n) => ownNames.includes(nameKey(n)));
+    const ownNames = [categoryKey(r.label), categoryKey(path[path.length - 1]), categoryKey(path.join(":"))];
+    const ownTotal = nextTotal(i + 1, (n) => ownNames.includes(categoryKey(n)));
     const byTotal = ownTotal !== -1 && (stop === -1 || ownTotal < stop);
     const next = body.slice(i + 1).find((b) => !b.blank && !BASIS.test(b.first));
     const byIndent = !byTotal && !!next && next.indent > r.indent && !next.totalName;
@@ -453,7 +533,7 @@ export function parseQboPnl(text: string): QboPnl {
   // The same account written twice (e.g. split across pages) is one account.
   const merged = new Map<string, QboAccount>();
   for (const a of accounts) {
-    const key = `${a.section}\u0000${a.path.map(nameKey).join(":")}`;
+    const key = `${a.section}\u0000${a.path.map(categoryKey).join(":")}`;
     const seen = merged.get(key);
     if (!seen) merged.set(key, { ...a, cents: { ...a.cents } });
     else for (const m of months) seen.cents[m] += a.cents[m];

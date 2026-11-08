@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { parseColumnLabel, parseQboPnl, QboPnlParseError, sectionDirection, selectMonths, type QboPnl } from "./qbo-pnl";
+import { parseCellAmount, parseColumnLabel, parseQboPnl, QboPnlParseError, sectionDirection, selectMonths, type QboPnl } from "./qbo-pnl";
 
 const sample = readFileSync("fixtures/qbo-pnl-by-month.sample.csv", "utf8");
 
@@ -23,6 +23,11 @@ describe("parseColumnLabel", () => {
     ["October 16–31, 2026", "2026-10", "2026-10-16", "2026-10-31", true],
     ["Oct 1 - Oct 31, 2026", "2026-10", "2026-10-01", "2026-10-31", false],
     ["Nov 1, 2026", "2026-11", "2026-11-01", "2026-11-01", true],
+    // What Excel writes for "Jan 2026" when the file is opened and re-saved.
+    ["Jan-26", "2026-01", "2026-01-01", "2026-01-31", false],
+    ["Jan 26", "2026-01", "2026-01-01", "2026-01-31", false],
+    ["Sep-26", "2026-09", "2026-09-01", "2026-09-30", false],
+    ["January-2026", "2026-01", "2026-01-01", "2026-01-31", false],
   ])("reads %s", (label, month, from, to, partial) => {
     expect(parseColumnLabel(label)).toEqual({ column: { label, month, from, to, partial } });
   });
@@ -32,8 +37,33 @@ describe("parseColumnLabel", () => {
     expect(parseColumnLabel("Feb 1-30, 2026")).toEqual({ error: expect.stringContaining("isn't a real date range") });
   });
 
-  it.each(["Total", "Q1 2026", "2026", "Week 1", "Jan 1, 2026 - Feb 1, 2026", ""])("ignores %s", (label) => {
+  // A two-digit year only in Excel's own "mmm-yy" form: a 3-letter month. "November 17" (from an
+  // unquoted date stamp) is not November 2017.
+  it.each(["Total", "Q1 2026", "2026", "Week 1", "Jan 1, 2026 - Feb 1, 2026", "", "Jan-6", "Jan-202", "Foo-26", "November 17", "Sept-26", "January-26"])("ignores %s", (label) => {
     expect(parseColumnLabel(label)).toBeNull();
+  });
+});
+
+describe("parseCellAmount", () => {
+  it.each([
+    ["-", 0],
+    [" - ", 0],
+    ["  –  ", 0],
+    ["—", 0],
+    ["$ -", 0],
+    [" $ -   ", 0],
+    ["$ (1,234.56)", -123456],
+    ["(1,234.56)", -123456],
+    ["$1,234.56", 123456],
+    ["-5.00", -500],
+    ["5.00-", -500],
+    ["- 5.00", -500],
+  ])("reads %j as %i", (text, cents) => {
+    expect(parseCellAmount(text)).toBe(cents);
+  });
+
+  it.each(["--", "- -", "-x", "x-", "$", "-$-", "(-)", "n/a"])("refuses %j: a dash is zero only when the cell is just the dash", (text) => {
+    expect(parseCellAmount(text)).toBeNull();
   });
 });
 
@@ -204,6 +234,75 @@ describe("parseQboPnl: layout tolerance", () => {
     expect(byName(p, "Other Income:Gift Cards")).toMatchObject({ section: "income" });
   });
 
+  it("reads a file re-saved in Excel: Jan-26 headers, dash zeros, '$ (x)' negatives, padded cells", () => {
+    const p = parseQboPnl(
+      report(
+        [
+          "Expenses,,,",
+          'Rent," 1,234.56 "," $ 1,234.56 "," 2,469.12 "',
+          'Refunds," $ (123.45)", - ,"(123.45)"',
+          "Fees, $ - , – , - ",
+          'Total Expenses," 1,111.11 "," 1,234.56 "," 2,345.67 "',
+          'Net Income,"(1,111.11)","(1,234.56)","(2,345.67)"',
+        ],
+        ",Jan-26,Feb-26,Total",
+      ),
+    );
+    expect(accounts(p)).toEqual([
+      { path: ["Rent"], section: "expenses", cents: { "2026-01": 123456, "2026-02": 123456 } },
+      { path: ["Refunds"], section: "expenses", cents: { "2026-01": -12345, "2026-02": 0 } },
+      { path: ["Fees"], section: "expenses", cents: { "2026-01": 0, "2026-02": 0 } },
+    ]);
+    expect([p.problems, p.warnings]).toEqual([[], []]);
+  });
+
+  it("still flags a wrong amount in an Excel-style file", () => {
+    const p = parseQboPnl(report(["Expenses,,,", "Rent, 10.00 , - , 10.00 ", "Fees, - , - , 2.00 ", "Total Expenses, 10.00 , - , 10.00 ", "Net Income,(10.00), - ,(10.00)"], ",Jan-26,Feb-26,Total"));
+    expect(p.problems).toEqual([{ message: `Line 8: "Fees" Total column says $2.00, but its months add up to $0.00.`, month: null }]);
+  });
+
+  it("drops a first column that is blank on every line", () => {
+    const text = report(["Income", "Sales,10.00,20.00,30.00", "Total Income,10.00,20.00,30.00", "Net Income,10.00,20.00,30.00"])
+      .split("\n")
+      .map((l) => `,${l}`)
+      .join("\n");
+    const p = parseQboPnl(text);
+    expect(accounts(p)).toEqual([{ path: ["Sales"], section: "income", cents: { "2026-01": 1000, "2026-02": 2000 } }]);
+    expect([p.problems, p.warnings, p.basis]).toEqual([[], [], "cash"]);
+  });
+
+  it("skips the date stamp on a line of its own after Net Income, unquoted or not", () => {
+    const body = ["Income", "Sales,10.00,20.00,30.00", "Total Income,10.00,20.00,30.00", "Net Income,10.00,20.00,30.00"];
+    for (const stamp of ["Saturday, November 7, 2026 10:15 AM GMT-05:00", "November 7, 2026 10:15:02 PM EST", "Sat, Nov 7, 2026", '"Saturday, November 7, 2026 10:15 AM GMT-05:00"']) {
+      const text = report(body).replace('"Cash Basis Saturday, November 7, 2026 10:00 AM GMT-05:00"', `Cash Basis\n${stamp}`);
+      const p = parseQboPnl(text);
+      expect([p.basis, p.problems, p.warnings, p.accounts.length]).toEqual(["cash", [], [], 1]);
+    }
+  });
+
+  it("skips an unquoted date stamp in the preamble or the footer, even where it looks like a month", () => {
+    const body = ["Income", "Sales,10.00,20.00,30.00", "Total Income,10.00,20.00,30.00", "Net Income,10.00,20.00,30.00"];
+    // Unquoted, "November 17" and "Nov 17" land in column 2, under where the months go.
+    for (const stamp of ["Saturday, November 17, 2026 10:15 AM GMT-05:00", "Sat, Nov 17, 2026 10:15 AM"]) {
+      const preamble = ["Salon LLC", "Profit and Loss", stamp, "Cash Basis", "", ",Jan 2026,Feb 2026,Total", ...body].join("\n");
+      const p = parseQboPnl(preamble);
+      expect([p.months, p.basis, p.problems, p.accounts.length]).toEqual([["2026-01", "2026-02"], "cash", [], 1]);
+      const footer = parseQboPnl(report(body).replace('"Cash Basis Saturday, November 7, 2026 10:00 AM GMT-05:00"', `Cash Basis\n${stamp}`));
+      expect([footer.months, footer.basis, footer.problems, footer.accounts.length]).toEqual([["2026-01", "2026-02"], "cash", [], 1]);
+    }
+  });
+
+  it("refuses a header with a bad column instead of passing over it to a later one", () => {
+    const text = [",Jan 2026,Q1 2026,Total", "Income", "Sales,1.00,1.00,2.00", ",Jan 2026,Feb 2026,Total", "Income", "Sales,1.00,1.00,2.00", "Total Income,1.00,1.00,2.00", "Net Income,1.00,1.00,2.00"].join("\n");
+    expect(() => parseQboPnl(text)).toThrow(/Line 1, column 3: the header "Q1 2026" isn't a month/);
+    // Even with no amounts between them: reading the second line's months would shift every column.
+    const twoHeaders = [",Jan 2026,Feb 2026,Totals", ",Feb 2026,Mar 2026,Total", "Income", "Booth Rent,100.00,200.00,300.00", "Total Income,100.00,200.00,300.00", "Net Income,100.00,200.00,300.00"].join("\n");
+    expect(() => parseQboPnl(twoHeaders)).toThrow(/Line 1, column 4: the header "Totals" isn't a month/);
+    // A date stamp before a header with a bad column: the error names the header, not the stamp.
+    const stampFirst = ["Sat, Nov 17, 2026 10:15 AM", ",Jan 2026,Feb 2026,Totals", "Income"].join("\n");
+    expect(() => parseQboPnl(stampFirst)).toThrow(/Line 2, column 4: the header "Totals" isn't a month/);
+  });
+
   it("copes with an unquoted footer, a BOM and Windows line endings", () => {
     const text = "\uFEFF" + report(["Income", "Sales,10.00,10.00,20.00", "Total Income,10.00,10.00,20.00", "Net Income,10.00,10.00,20.00"])
       .replace('"Cash Basis Saturday, November 7, 2026 10:00 AM GMT-05:00"', "Cash Basis Saturday, November 7, 2026 10:00 AM")
@@ -235,6 +334,33 @@ describe("parseQboPnl: the file's own totals are blocking problems", () => {
       report(["Income", "Sales,10.00,10.00,20.00", "Total Income,10.00,10.00,20.00", "Gross Profit,10.00,10.00,20.00", "Net Income,10.00,9.00,19.00"]),
     );
     expect(p.problems).toEqual([{ message: `Line 10: "Net Income" for Feb 2026 says $9.00, but the accounts add up to $10.00.`, month: "2026-02" }]);
+  });
+
+  it("reads summary rows ending in (Loss) and cross-checks them the same way", () => {
+    const body = (net: string) => [
+      "Income",
+      "Sales,100.00,100.00,200.00",
+      "Total Income,100.00,100.00,200.00",
+      "Cost of Goods Sold",
+      "Product Cost,10.00,10.00,20.00",
+      "Total Cost of Goods Sold,10.00,10.00,20.00",
+      "Gross Profit (Loss),90.00,90.00,180.00",
+      "Expenses",
+      "Rent,50.00,50.00,100.00",
+      "Total Expenses,50.00,50.00,100.00",
+      "Net Operating Income (Loss),40.00,40.00,80.00",
+      "Other Expenses",
+      "Penalties,3.00,,3.00",
+      "Total Other Expenses,3.00,0.00,3.00",
+      "Net Other Income (Loss),-3.00,0.00,-3.00",
+      `Net Income (Loss),${net}`,
+    ];
+    const ok = parseQboPnl(report(body("37.00,40.00,77.00")));
+    expect([ok.problems, ok.warnings]).toEqual([[], []]);
+    expect(ok.checks.map((c) => c.name)).toEqual(["Gross Profit", "Net Operating Income", "Net Other Income", "Net Income"]);
+    expect(ok.accounts.map((a) => a.name)).toEqual(["Sales", "Product Cost", "Rent", "Penalties"]);
+    const wrong = parseQboPnl(report(body("37.00,41.00,78.00")));
+    expect(wrong.problems).toEqual([{ message: `Line 21: "Net Income" for Feb 2026 says $41.00, but the accounts add up to $40.00.`, month: "2026-02" }]);
   });
 
   it("blocks on a missing Net Income row or an Accrual report; only warns when the basis isn't stated", () => {
@@ -278,10 +404,49 @@ describe("parseQboPnl: money it can't place fails the run, with the line", () =>
     expect(() => parseQboPnl(expenses(["Cash Basis Adjustment,25.00,,25.00"]))).toThrow(/Line 7: "Cash Basis Adjustment" has amounts but looks like the "Cash Basis" footer/);
   });
 
+  it("refuses a Cash Basis row with amounts outside any section, e.g. after Net Income", () => {
+    const body = ["Income", "Sales,10.00,10.00,20.00", "Total Income,10.00,10.00,20.00", "Net Income,10.00,10.00,20.00"];
+    expect(() => parseQboPnl(report([...body, "Cash Basis Adjustment,500.00,500.00,1000.00"]))).toThrow(
+      /Line 10: "Cash Basis Adjustment" has amounts but looks like the "Cash Basis" footer/,
+    );
+    expect(() => parseQboPnl(report(["Cash Basis Adjustment,500.00,,500.00", ...body]))).toThrow(/Line 6: "Cash Basis Adjustment" has amounts/);
+    // The real footer, unquoted across three months, still has no amounts in it.
+    const three = report(["Income", "Sales,1.00,1.00,1.00,3.00", "Total Income,1.00,1.00,1.00,3.00", "Net Income,1.00,1.00,1.00,3.00"], ",Jan 2026,Feb 2026,Mar 2026,Total").replace(
+      '"Cash Basis Saturday, November 7, 2026 10:00 AM GMT-05:00"',
+      "Cash Basis Saturday, November 7, 2026 10:00 AM GMT-05:00",
+    );
+    expect(parseQboPnl(three)).toMatchObject({ basis: "cash", problems: [] });
+  });
+
   it("refuses amounts outside any section", () => {
     expect(() =>
       parseQboPnl(report(["Stray,1.00,1.00,2.00", "Income", "Sales,10.00,10.00,20.00", "Total Income,10.00,10.00,20.00", "Net Income,10.00,10.00,20.00"])),
     ).toThrow(`Line 6: "Stray" has amounts but isn't under Income, Cost of Goods Sold, Expenses, Other Income or Other Expenses`);
+  });
+
+  it("refuses a summary-looking row it doesn't know, saying so", () => {
+    expect(() =>
+      parseQboPnl(report(["Income", "Sales,10.00,10.00,20.00", "Total Income,10.00,10.00,20.00", "Net Earnings,10.00,10.00,20.00", "Net Income,10.00,10.00,20.00"])),
+    ).toThrow(`Line 9: "Net Earnings" has amounts and looks like a summary row, but isn't one this tool knows`);
+  });
+
+  it("refuses a date stamp line before Net Income, and other text after it", () => {
+    const body = ["Income", "Sales,10.00,20.00,30.00", "Total Income,10.00,20.00,30.00"];
+    expect(() => parseQboPnl(report([...body, "Saturday, November 7, 2026 10:15 AM", "Net Income,10.00,20.00,30.00"]))).toThrow(/Line 9: "November 7" under Jan 2026 isn't an amount/);
+    expect(() => parseQboPnl(report([...body, "Net Income,10.00,20.00,30.00", "Stray, ten, 5.00"]))).toThrow(/Line 10: "ten" under Jan 2026 isn't an amount/);
+    expect(() => parseQboPnl(report([...body, "Net Income,10.00,20.00,30.00", "Stray,5.00,,5.00"]))).toThrow(/Line 10: "Stray" has amounts but isn't under Income/);
+    // Not a real day or weekday: not a date stamp.
+    expect(() => parseQboPnl(report([...body, "Net Income,10.00,20.00,30.00", "Someday, November 7, 2026"]))).toThrow(/Line 10/);
+    // Inside a section (even one opened after Net Income), a date-stamp line is never skipped.
+    expect(() =>
+      parseQboPnl(report([...body, "Net Income,10.00,20.00,30.00", "Expenses", "Saturday, November 7, 2026", "Total Expenses,0.00,0.00,0.00"])),
+    ).toThrow(/Line 11: "November 7" under Jan 2026 isn't an amount/);
+  });
+
+  it("says what's wrong with text in a column that has no heading", () => {
+    // Labels one column to the right of where the header puts them (a leading column that isn't blank everywhere).
+    const text = ["Salon LLC", ",,Jan 2026,Feb 2026,Total", ",Income,,,", ",Sales,10.00,20.00,30.00"].join("\n");
+    expect(() => parseQboPnl(text)).toThrow(`Line 3: "Income" in column 2 has no heading above it. Account names must be in the first column`);
   });
 
   it("refuses amounts with no account name", () => {
