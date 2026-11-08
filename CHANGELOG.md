@@ -28,6 +28,11 @@
 - `qbo:compare`: a partial first or last month (`Jan 15-31, 2026`) gets a warning line right above the verdict saying which dates were compared, even when the whole month was asked for (#11).
 - `qbo:compare`: clearer messages for text in a column with no heading and for an unknown summary row, instead of a hint about thousands separators (#11).
 - `qbo:compare` won't print part of a malformed `DATABASE_URL`'s user or password in the report header (#11).
+- `qbo:compare` can no longer say MATCH when QuickBooks has equal amounts in Uncategorized Income and Uncategorized Expense that our Inbox doesn't hold. A gross check compares QuickBooks' Inbox-mapped money, ignoring signs, against our Inbox money in plus money out, and blocks the month when QuickBooks has more (#11).
+- `qbo:compare` refuses, before connecting, a `DATABASE_URL` whose user or password has an unencoded `@`, `/`, `?` or `#`. Its header and the database driver's error could otherwise print part of the password; it now exits 2 and asks you to percent-encode them. The header check also covers an `@` before `?` or `#` (#11).
+- `qbo:compare`: a "Cash Basis …" row with amounts outside any section is refused instead of skipped as the footer (#11).
+- `qbo:compare`: an unquoted date stamp in the report's preamble (`Saturday, November 17, 2026 …`) is skipped again, not mistaken for a month header. Two-digit years are read only after a 3-letter month, Excel's `Jan-26` (#11).
+- `qbo:compare`: unmapped QuickBooks accounts with the same name in Income and Expenses are two cells, not an internal error (#11).
 - Import: the "Create new" category kind is re-guessed when you flip "money out as positive", unless you picked the kind yourself; the category groups and their Booth Rent default are now built by one tested function, with one categorizer pass per row (#10).
 - Import: the "Recent imports" card shows a new batch right after the import finishes, without a reload (#9).
 - Import: "1 row couldn't be read and was NOT imported", and the same "was/were" fix for the skipped-rows and report-lines messages (#9).
