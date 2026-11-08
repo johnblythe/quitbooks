@@ -611,6 +611,8 @@ describe("describeDatabase", () => {
     ["postgresql://admin@myserver:12?ab@myserver.postgres.database.azure.com/db", ["admin", "myserver", "ab"]],
     ["postgresql://user:sec@ret?x@ep-cool-1.us-east-2.aws.neon.tech/db", ["sec", "ret"]],
     ["postgresql://user:a@b#c@host.example.com/db", ["b/", "b#"]],
+    // Doesn't parse at all ("pa" isn't a port), but has credentials in it.
+    ["postgresql://quitbooks_owner:pa/ss@host.example.com/db", ["quitbooks_owner", "pa/ss"]],
   ])("never prints a fragment of the user or password: %s", (url, fragments) => {
     expect(databaseUrlMisread(url)).toBe(true);
     const d = describeDatabase(url);
