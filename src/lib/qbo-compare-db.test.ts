@@ -166,8 +166,10 @@ describe("qbo:compare against the synthetic QuickBooks samples", () => {
     expect(run.report).toContain("- Our books: test PGlite");
     for (const m of run.result.months) {
       expect(m.status).toBe("ok");
-      expect(m.ours).toEqual({ income: m.qbo.income, expenses: m.qbo.expenses, net: m.qbo.net });
+      expect(m.ours).toEqual({ income: m.qbo.income, expenses: m.qbo.expenses, inbox: m.qbo.inbox, net: m.qbo.net });
     }
+    // Feb's Inbox, net: $75 in less $172 out, against Uncategorized Income less Uncategorized Expense and Ask My Accountant.
+    expect(run.result.months.map((m) => m.qbo.inbox)).toEqual([0, -9700, 0]);
     // Net QB is the file's own Net Income row.
     expect(run.result.months.map((m) => m.qbo.netReported)).toEqual([-69607, -167075, -176602]);
     // Every QuickBooks account found its category through the mapping saved by the import.
@@ -218,17 +220,23 @@ describe("qbo:compare against the synthetic QuickBooks samples", () => {
 
   it("explains a raw import: Inbox money on one side, QuickBooks' category on the other", async () => {
     const run = await compare();
+    const inbox = "Inbox: uncategorized, net (money in − money out)";
     expect(cells(run)).toEqual([
       { month: "2025-01", label: "Booth Rent", qbo: 140000, ours: 105000, diff: -35000 },
-      { month: "2025-01", label: "Inbox: uncategorized money in", qbo: 0, ours: 35000, diff: 35000 },
-      { month: "2025-02", label: "Inbox: uncategorized money out", qbo: 17200, ours: 54676, diff: 37476 },
+      { month: "2025-01", label: inbox, qbo: 0, ours: 35000, diff: 35000 },
       { month: "2025-02", label: "Supplies", qbo: 45075, ours: 19020, diff: -26055 },
       { month: "2025-02", label: "Repairs & Maintenance", qbo: 5000, ours: 0, diff: -5000 },
+      // $75 in less $546.76 out, against $75 in less $172 out.
+      { month: "2025-02", label: inbox, qbo: -9700, ours: -47176, diff: -37476 },
     ]);
     expect(run.summary).toBe("5 mismatches, total abs diff $1,385.31");
-    const uncatIn = run.result.mismatches[1];
-    expect(uncatIn.lines.map((l) => l.tx.description)).toEqual(["Zelle from a stranger"]);
-    expect(run.result.mismatches[2].feeds.map((f) => f.account)).toEqual(["Uncategorized Expense", "Ask My Accountant"]);
+    const janInbox = run.result.mismatches[1];
+    expect(janInbox.lines.map((l) => l.tx.description)).toEqual(["Zelle from a stranger"]);
+    expect(run.result.mismatches[4].feeds.map((f) => [f.account, f.cents])).toEqual([
+      ["Uncategorized Income", 7500],
+      ["Uncategorized Expense", -5200],
+      ["Ask My Accountant", -12000],
+    ]);
     expect(run.result.inbox[1]).toMatchObject({ inCents: 7500, inCount: 1, outCents: 54676, outCount: 5 });
     // Net income is off only by the asset purchase QuickBooks keeps off the P&L.
     expect(run.result.months.map((m) => m.ours.net - m.qbo.net)).toEqual([0, -6421, 0]);
@@ -244,6 +252,32 @@ describe("qbo:compare against the synthetic QuickBooks samples", () => {
     const feb = await compare({ from: "2025-02", to: "2025-02" });
     expect(feb.result.columns.map((c) => c.month)).toEqual(["2025-02"]);
     expect(feb.summary).toBe("1 mismatch, total abs diff $27.00");
+  });
+
+  it("reads our books for only the days of a partial month, and says so above the verdict", async () => {
+    // March 1-8 only: Jane's rent, Pat's retail sale and the Duke bill. March rent (the 9th) and the
+    // plumber (the 12th) are after it, on our side too, or they would show up as mismatches.
+    const text = [
+      ',"Mar 1-8, 2025",Total',
+      "Income,,",
+      "Booth Rent,350.00,350.00",
+      "Retail Sales,45.00,45.00",
+      "Total for Income,395.00,395.00",
+      "Expenses,,",
+      "Utilities,151.02,151.02",
+      "Total for Expenses,151.02,151.02",
+      "Net Income,243.98,243.98",
+      "",
+      "Cash Basis",
+    ].join("\n");
+    const run = await compare({ csvText: text, from: "2025-03", to: "2025-03" });
+    expect(cells(run)).toEqual([]);
+    expect(run.result.months[0].ours).toEqual({ income: 39500, expenses: 15102, inbox: 0, net: 24398 });
+    expect(run.match).toBe(true);
+    expect(run.report.trimEnd().split("\n").slice(-2)).toEqual([
+      `WARNING: partial month. Compared 2025-03 only from 2025-03-01 to 2025-03-08 ("Mar 1-8, 2025"); the rest of that month was not checked.`,
+      "MATCH: Mar 1-8, 2025 to Mar 1-8, 2025 (1 month)",
+    ]);
   });
 
   it("lets --map override the saved mapping, and lists our category left without an account", async () => {
@@ -445,9 +479,9 @@ describe("the CLI (npm run qbo:compare)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  const cli = (args: string[]) => {
+  const cli = (args: string[], databaseUrl = `pglite:${join(dir, "pglite")}`) => {
     const res = spawnSync(process.execPath, ["--import", "tsx", "scripts/qbo-compare.ts", ...args], {
-      env: { ...process.env, DATABASE_URL: `pglite:${join(dir, "pglite")}` },
+      env: { ...process.env, DATABASE_URL: databaseUrl },
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
     });
@@ -474,22 +508,44 @@ describe("the CLI (npm run qbo:compare)", () => {
     expect(r.last).toBe("2 mismatches (1 month total, 1 problem in the QuickBooks file), total abs diff $41.00");
   }, 60_000);
 
-  it("exits 1 on an empty --out or --map instead of ignoring it, and leaves an old report alone", () => {
+  it("exits 2 (an error, not a mismatch) on an empty --out or --map instead of ignoring it, and leaves an old report alone", () => {
     const stale = file("report.md", "MATCH: from an earlier run\n");
     for (const args of [["--out="], ["--out", ""], ["--map="], ["--map", ""]]) {
       const r = cli(["fixtures/qbo-pnl-by-month.sample.csv", ...args]);
-      expect(r.code).toBe(1);
+      expect(r.code).toBe(2);
       expect(r.out).toBe("");
       expect(r.err).toMatch(/--(out|map) was given an empty value/);
     }
     expect(readFileSync(stale, "utf8")).toBe("MATCH: from an earlier run\n");
   }, 60_000);
 
-  it("exits 1 with a message for months the file doesn't have", () => {
+  it("exits 2 with a message for months the file doesn't have, or a file it can't read", () => {
     const r = cli(["fixtures/qbo-pnl-by-month.sample.csv", "--to", "2025-06"]);
-    expect(r.code).toBe(1);
+    expect(r.code).toBe(2);
     expect(r.out).toBe("");
     expect(r.err).toContain("but you asked for 2025-01 to 2025-06");
+    const unreadable = cli([file("total-wine.csv", editPnl(`Utilities,142.18,,151.02,293.20`, `Total Wine & More,25.00,,,25.00\nUtilities,142.18,,151.02,293.20`))]);
+    expect(unreadable.code).toBe(2);
+    expect(unreadable.err).toMatch(/"Total Wine & More" has amounts and starts with "Total"/);
+    const missing = cli([join(dir, "no-such-file.csv")]);
+    expect(missing.code).toBe(2);
+    expect(missing.out).toBe("");
+  }, 60_000);
+
+  it("refuses a DATABASE_URL whose user or password would be misread as the host, before connecting", () => {
+    // Each would make the driver look up "pwfrag.invalid" or "usrfrag.invalid" (part of the
+    // password or the user) as the host, and its error would print it.
+    for (const url of [
+      "postgresql://quitbooks_owner:Tr0ub@pwfrag.invalid?2026@127.0.0.1:1/quitbooks",
+      "postgresql://quitbooks_owner:k9@pwfrag.invalid#Lm2@127.0.0.1:1/quitbooks",
+      "postgresql://usrfrag.invalid:1234/s3cret@127.0.0.1:1/quitbooks",
+    ]) {
+      const r = cli(["fixtures/qbo-pnl-by-month.sample.csv"], url);
+      expect(r.code).toBe(2);
+      expect(r.out).toBe("");
+      expect(r.err).toMatch(/can't be read safely.*percent-encode @ \/ \? #/i);
+      expect(r.err).not.toMatch(/pwfrag|usrfrag|Tr0ub|k9|Lm2|s3cret|quitbooks_owner|ENOTFOUND|Reading our books/);
+    }
   }, 60_000);
 
   it("prints a report far over 64 KB in full, verdict line last", () => {

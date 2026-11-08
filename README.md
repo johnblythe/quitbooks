@@ -112,20 +112,38 @@ DATABASE_URL="$(cs production --pooled)" npm run qbo:compare -- <pnl.csv> --to 2
   - `--out report.md`: also write the report to a file;
   - `--map map.json`.
 - Output (Markdown):
-  - which database was read (host and database name, or "local PGlite");
+  - which database was read: host and database name plus the Neon endpoint id (`ep-…`, which tells the production and dev branches apart), or "local PGlite";
   - problems in the QuickBooks file itself;
-  - income, expenses and net per month, with Net Income taken from QuickBooks' own Net Income row;
+  - income, expenses, Inbox net and net per month, with Net Income taken from QuickBooks' own Net Income row;
   - every month × category cell that differs, with the QuickBooks accounts that feed it and our transactions in it;
   - the Inbox totals per month;
   - the account mapping.
-- The last line is `MATCH: <first month> to <last month> (N months)` (exit 0), or `N mismatches, total abs diff $X` (exit 1).
-  - MATCH needs every cell and every month total to agree within the tolerance.
+- How money is counted:
+  - Income and expenses are counted by our category on both sides. A QuickBooks income account mapped to one of our expense categories (a supplies refund) counts as a negative expense on both sides, so it can match.
+  - The Inbox is compared as one net amount per month (money in − money out) against the QuickBooks accounts mapped to it, usually the placeholders. A placeholder nets a purchase and its refund inside one account, so comparing each direction separately would show two false mismatches. The Inbox net sits outside income and expenses, and every month's net includes it.
+  - So netting can't hide money, there is also a gross check. Add up each Inbox-mapped QuickBooks account's month amount, ignoring signs: that can't be more than our Inbox money in plus money out (beyond the tolerance). If it is, the month is a mismatch, counted once: when the month's Inbox difference already shows the money, that difference is the mismatch. A shortfall within the tolerance is still listed. An example is the same $500 in Uncategorized Income and in Uncategorized Expense with nothing in our Inbox: the nets agree, but the gross check fails.
+  - Unmapped QuickBooks accounts are kept apart by direction, so a "Misc" in Income and a "Misc" in Expenses are two cells.
+- Exit codes:
+  - 0: the last line is `MATCH: <first month> to <last month> (N months)`;
+  - 1: the last line is `N mismatches, total abs diff $X`;
+  - 2: it couldn't compare (bad options, a file it can't read or place, a database error), and the error is on stderr. That includes a `DATABASE_URL` with an unencoded `@`, `/`, `?` or `#` in its user or password: it is refused before connecting, because part of the password would be taken for the host. Percent-encode them (`@` is `%40`).
+- MATCH needs every cell and every month total to agree within the tolerance.
   - It also needs the file to agree with itself: every section and parent Total, Gross Profit and Net Income must equal its accounts, a Net Income row must be present, and the report must not be Accrual.
-- A row the parser can't place stops the run with its line number. That covers:
+  - A partial first or last month (`Jan 15-31, 2026`) is compared for its days only, on both sides. Even when you asked for the whole month with `--from`/`--to`, a `WARNING: partial month` line right above the verdict says which dates were compared.
+- A row the parser can't place stops the run (exit 2) with its line number. That covers:
   - an amount outside any section, or with no account name;
   - a "Total …" row that closes nothing;
+  - a summary-looking row it doesn't know (e.g. `Net Earnings`);
   - an amount that isn't under a month heading, such as an unquoted `1,800.00`;
+  - a "Cash Basis …" row with amounts, wherever it is;
   - month columns with a gap.
+- It also reads:
+  - a file opened and re-saved in Excel: `Jan-26` / `Jan 26` month headers (a two-digit year only after a 3-letter month), ` - ` zeros and `$ (12.00)` negatives;
+  - a first column that is blank on every line;
+  - the date stamp on a line of its own, in the preamble or after Net Income;
+  - summary rows ending in `(Loss)`, such as `Net Income (Loss)`, which are cross-checked like the others.
+
+  Exporting the CSV straight from QuickBooks, without re-saving it, is still the safest.
 - Mapping QuickBooks accounts to our categories:
   - a `--map` file wins: `{"QuickBooks account": "Our category"}`, with `"Inbox"` meaning uncategorized;
   - then the choices saved by the QuickBooks import;

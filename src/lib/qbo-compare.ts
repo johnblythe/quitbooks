@@ -4,11 +4,12 @@
  * qbo-compare-db.ts and the CLI in scripts/qbo-compare.ts.
  *
  * Our numbers come from `computePnl` over ledger lines (splits expanded), so this measures exactly
- * what the app's P&L shows: transfers left out, uncategorized money counted as "Uncategorized".
+ * what the app's P&L shows: transfers left out, and uncategorized money netted into one Inbox cell
+ * per month (see INBOX_KEY), with a gross check so netting can't hide money.
  * The comparison is at OUR category level: several QuickBooks accounts may feed one category.
  */
 import type { MonthKey } from "./dates";
-import { categoryKey, isPlaceholderCategory, type CategoryKind } from "./import-categories";
+import { categoryKey, isPlaceholderCategory, type CategoryKind, type SavedCategoryChoice } from "./import-categories";
 import { toMetricTxs, type LedgerLine, type LedgerSplit, type LedgerTx } from "./ledger";
 import { computePnl, UNCATEGORIZED_IN, UNCATEGORIZED_OUT } from "./metrics";
 import { formatCents } from "./money";
@@ -36,9 +37,6 @@ export type AccountMapping = {
 
 /** Bad input from the person running the script (e.g. a --map entry naming no category of ours). */
 export class QboCompareInputError extends Error {}
-
-/** Saved import choices may be any of the FileCategoryChoice shapes; only these matter here. */
-type SavedChoice = { type: "existing"; categoryId: string } | { type: "inbox" } | { type: "new"; name: string };
 
 const INBOX_NAMES = new Set(["inbox", "uncategorized"]);
 
@@ -96,15 +94,18 @@ export function resolveOverrides(raw: unknown, categories: OurCategory[]): Map<s
   return out;
 }
 
-/** The saved import mapping, keyed like `mapKey`. Unknown shapes are ignored. */
-function savedIndex(saved: Record<string, unknown> | null | undefined): Map<string, SavedChoice> {
-  const out = new Map<string, SavedChoice>();
+/**
+ * The saved import mapping, keyed like `mapKey`. The import saves only "existing" and "inbox"
+ * choices: a "Create new" pick is saved as an "existing" choice of the category it created
+ * (`resolveCategoryChoices` and `mergeCategoryMap` in import-commit.ts). Any other shape is ignored.
+ */
+function savedIndex(saved: Record<string, unknown> | null | undefined): Map<string, SavedCategoryChoice> {
+  const out = new Map<string, SavedCategoryChoice>();
   for (const [key, v] of Object.entries(saved ?? {})) {
     if (!v || typeof v !== "object") continue;
     const c = v as Record<string, unknown>;
     if (c.type === "inbox") out.set(mapKey(key), { type: "inbox" });
     else if (c.type === "existing" && typeof c.categoryId === "string") out.set(mapKey(key), { type: "existing", categoryId: c.categoryId });
-    else if (c.type === "new" && typeof c.name === "string") out.set(mapKey(key), { type: "new", name: c.name });
   }
   return out;
 }
@@ -129,9 +130,7 @@ export function mapAccounts(
     const s = saved.get(mapKey(name));
     if (!s) return null;
     if (s.type === "inbox") return s;
-    if (s.type === "existing") return ids.has(s.categoryId) ? { type: "category", categoryId: s.categoryId } : null;
-    const created = categoryByName(categories, s.name);
-    return created ? { type: "category", categoryId: created.id } : null;
+    return ids.has(s.categoryId) ? { type: "category", categoryId: s.categoryId } : null;
   };
   const fromName = (name: string): MapTarget | null => {
     const c = categoryByName(categories, name);
@@ -159,14 +158,29 @@ export function mapAccounts(
 
 export type CellFeed = { account: string; section: QboSection; cents: number };
 
+/**
+ * The Inbox's cell: our uncategorized money against the QuickBooks accounts mapped to the Inbox
+ * (the placeholders Uncategorized Income/Expense and Ask My Accountant), as one net amount per month,
+ * money in minus money out. Net, because a placeholder nets both directions inside one account (a
+ * refund in Uncategorized Expense), while our Inbox keeps them as separate rows.
+ */
+export const INBOX_KEY = "__inbox";
+const INBOX_LABEL = "Inbox: uncategorized, net (money in − money out)";
+
+/** An income or expense category's kind, a transfer category, or the Inbox (one net amount). */
+export type CellKind = CategoryKind | "inbox";
+
 /** One month x one of our categories (or our Inbox, or an unmapped QuickBooks account). */
 export type Cell = {
   month: MonthKey;
   column: QboColumn;
-  /** Our category id, UNCATEGORIZED_IN / UNCATEGORIZED_OUT, or "qbo:<account>" for an unmapped account. */
+  /**
+   * Our category id, INBOX_KEY, or "qbo:<income|expense>:<account>" for an unmapped account (by
+   * direction, so a same-named account in Income and in Expenses stays two cells).
+   */
   key: string;
   label: string;
-  kind: CategoryKind;
+  kind: CellKind;
   qbo: number;
   ours: number;
   /** ours - QuickBooks. */
@@ -182,23 +196,64 @@ export type MonthTotals = {
   month: MonthKey;
   column: QboColumn;
   /**
-   * Income and expenses add up the file's accounts. `net` is the file's own Net Income row
-   * (`netReported`), falling back to the recomputed net only when the file has none (which is a
-   * blocking problem by itself).
+   * Both sides add up the month's cells the same way, by the cell's kind: our category's kind, or
+   * the QuickBooks section for an unmapped account. So a QuickBooks income account mapped to one of
+   * our expense categories is a negative expense on both sides. QuickBooks money mapped to one of our
+   * transfer categories counts in its QuickBooks section (ours leaves it out). `inbox` is the Inbox
+   * cell (net, money in − money out), outside income and expenses; net = income − expenses + inbox.
+   *
+   * For QuickBooks, `net` is the file's own Net Income row (`netReported`), falling back to the net
+   * recomputed from its accounts only when the file has none (which is a blocking problem by itself).
    */
-  qbo: { income: number; expenses: number; net: number; netReported: number | null; netComputed: number };
-  ours: { income: number; expenses: number; net: number };
+  qbo: { income: number; expenses: number; inbox: number; net: number; netReported: number | null; netComputed: number };
+  /** `net` is our P&L's net, transfers left out and uncategorized money in. */
+  ours: { income: number; expenses: number; inbox: number; net: number };
   /**
-   * Income, expenses or net differ by more than the tolerance.
-   * - "ok": all three are within it.
-   * - "cells": off, and this month's mismatched cells show where.
+   * The Inbox without netting. QuickBooks: each Inbox-mapped account's month amount, signs ignored,
+   * added up. Ours: Inbox money in plus money out. When the books agree, every QuickBooks placeholder
+   * dollar is one of our Inbox rows, so QuickBooks' can't be more than ours. If it is (beyond the
+   * tolerance), netting may be hiding money, e.g. the same $500 in Uncategorized Income and in
+   * Uncategorized Expense with nothing in our Inbox: the month is a "mismatch".
+   */
+  inboxGross: { qbo: number; ours: number };
+  /**
+   * Income, expenses or net differ by more than the tolerance, or the Inbox gross check fails.
+   * - "ok": none of that.
+   * - "cells": totals off, and this month's mismatched cells show where.
    * - "mismatch": off with no mismatched cell to show for it (e.g. small cell differences adding up,
-   *   or the file's Net Income row disagreeing with its accounts). Counts as a mismatch.
+   *   or the file's Net Income row disagreeing with its accounts), or the Inbox gross check failed
+   *   and this month's Inbox cell doesn't show it. Counts as a mismatch.
    */
   status: "ok" | "cells" | "mismatch";
-  /** The biggest of the three differences (ours − QuickBooks) that is over the tolerance, or 0. */
+  /**
+   * The first of the net, income and expense differences (ours − QuickBooks) over the tolerance; or,
+   * when the month is a "mismatch" only because of the Inbox gross check, ours − QuickBooks of the
+   * Inbox gross; else 0.
+   */
   diff: number;
 };
+
+/** QuickBooks' Inbox gross is more than ours by more than the tolerance (see MonthTotals.inboxGross). */
+function inboxGrossShort(m: Pick<MonthTotals, "inboxGross">, tolerance: number): boolean {
+  return m.inboxGross.qbo - m.inboxGross.ours > tolerance;
+}
+
+type Buckets = { income: number; expenses: number; inbox: number; net: number };
+
+/**
+ * Every dollar on each side must land in exactly one of income, expenses and the Inbox: income −
+ * expenses + Inbox must be the side's net (for QuickBooks, recomputed from its accounts). Throws
+ * otherwise, because then something was dropped or counted twice and nothing can be trusted.
+ */
+export function checkMonthAddsUp(label: string, qbo: Buckets, ours: Buckets): void {
+  for (const [side, b] of [["the QuickBooks side", qbo], ["our side", ours]] as const) {
+    if (b.income - b.expenses + b.inbox !== b.net) {
+      throw new Error(
+        `qbo:compare bug: ${label}: ${side} doesn't add up (income ${formatCents(b.income)} − expenses ${formatCents(b.expenses)} + Inbox ${formatCents(b.inbox)} isn't the net ${formatCents(b.net)}), so nothing can be trusted.`,
+      );
+    }
+  }
+}
 
 export type InboxMonth = { month: MonthKey; column: QboColumn; inCents: number; inCount: number; outCents: number; outCount: number };
 
@@ -230,11 +285,6 @@ export type CompareResult = {
   warnings: string[];
 };
 
-const UNCAT_LABEL: Record<string, string> = {
-  [UNCATEGORIZED_IN]: "Inbox: uncategorized money in",
-  [UNCATEGORIZED_OUT]: "Inbox: uncategorized money out",
-};
-
 export function compareBooks(input: {
   pnl: QboPnl;
   categories: OurCategory[];
@@ -264,7 +314,7 @@ export function compareBooks(input: {
     const { month } = column;
     const ours = computePnl(metricTxs, categories, column.from, column.to);
     const cellMap = new Map<string, Cell>();
-    const cell = (key: string, label: string, kind: CategoryKind): Cell => {
+    const cell = (key: string, label: string, kind: CellKind): Cell => {
       let c = cellMap.get(key);
       if (!c) {
         c = { month, column, key, label, kind, qbo: 0, ours: 0, diff: 0, feeds: [], lines: [], note: null };
@@ -273,30 +323,35 @@ export function compareBooks(input: {
       return c;
     };
 
+    const inboxGross = { qbo: 0, ours: 0 };
     for (const line of [...ours.income, ...ours.expenses]) {
-      const cat = byId.get(line.categoryId);
-      const kind: CategoryKind = cat?.kind ?? (line.categoryId === UNCATEGORIZED_IN ? "income" : "expense");
-      cell(line.categoryId, cat?.name ?? UNCAT_LABEL[line.categoryId] ?? line.name, kind).ours += line.cents;
-      if (cat) ourCategoryTotals.set(cat.id, (ourCategoryTotals.get(cat.id) ?? 0) + Math.abs(line.cents));
+      if (line.categoryId === UNCATEGORIZED_IN || line.categoryId === UNCATEGORIZED_OUT) {
+        // computePnl reports both directions as positive amounts; the Inbox cell is net.
+        cell(INBOX_KEY, INBOX_LABEL, "inbox").ours += line.categoryId === UNCATEGORIZED_IN ? line.cents : -line.cents;
+        inboxGross.ours += line.cents;
+        continue;
+      }
+      const cat = byId.get(line.categoryId)!;
+      cell(cat.id, cat.name, cat.kind).ours += line.cents;
+      ourCategoryTotals.set(cat.id, (ourCategoryTotals.get(cat.id) ?? 0) + Math.abs(line.cents));
     }
 
-    let qboIncome = 0;
-    let qboExpenses = 0;
+    let netComputed = 0;
     for (const m of mappings) {
       const cents = m.account.cents[month] ?? 0;
       const dir = sectionDirection(m.account.section);
-      if (dir === "income") qboIncome += cents;
-      else qboExpenses += cents;
+      netComputed += dir === "income" ? cents : -cents;
       if (!cents) continue;
 
       let c: Cell;
       let signed = cents;
       if (!m.target) {
-        c = cell(`qbo:${m.fullName}`, `QuickBooks "${m.fullName}" (not mapped)`, dir);
+        c = cell(`qbo:${dir}:${m.fullName}`, `QuickBooks "${m.fullName}" (not mapped)`, dir);
         c.note = `Not mapped to any of our categories. Add it to --map.`;
       } else if (m.target.type === "inbox") {
-        const key = dir === "income" ? UNCATEGORIZED_IN : UNCATEGORIZED_OUT;
-        c = cell(key, UNCAT_LABEL[key], dir);
+        c = cell(INBOX_KEY, INBOX_LABEL, "inbox");
+        if (dir === "expense") signed = -cents;
+        inboxGross.qbo += Math.abs(cents);
       } else {
         const cat = byId.get(m.target.categoryId)!;
         c = cell(cat.id, cat.name, cat.kind);
@@ -312,17 +367,29 @@ export function compareBooks(input: {
       c.feeds.push({ account: m.fullName, section: m.account.section, cents: signed });
     }
 
+    // Month totals count both sides the same way, by the cell's kind (see MonthTotals).
+    const qbo = { income: 0, expenses: 0, inbox: 0 };
+    const our = { income: 0, expenses: 0, inbox: 0 };
+    const bucket = { income: "income", expense: "expenses", inbox: "inbox" } as const;
     for (const c of cellMap.values()) {
       c.diff = c.ours - c.qbo;
       cells.push(c);
+      if (c.kind === "transfer") {
+        // Our P&L leaves transfers out, so ours is 0 here. QuickBooks counts the money in its section.
+        for (const f of c.feeds) qbo[sectionDirection(f.section) === "income" ? "income" : "expenses"] += f.cents;
+        continue;
+      }
+      qbo[bucket[c.kind]] += c.qbo;
+      our[bucket[c.kind]] += c.ours;
     }
+    checkMonthAddsUp(column.label, { ...qbo, net: netComputed }, { ...our, net: ours.net });
     const reported = netIncomeRow ? netIncomeRow.cents[month] ?? 0 : null;
-    const computedNet = qboIncome - qboExpenses;
     months.push({
       month,
       column,
-      qbo: { income: qboIncome, expenses: qboExpenses, net: reported ?? computedNet, netReported: reported, netComputed: computedNet },
-      ours: { income: ours.totalIncome, expenses: ours.totalExpenses, net: ours.net },
+      qbo: { ...qbo, net: reported ?? netComputed, netReported: reported, netComputed },
+      ours: { ...our, net: ours.net },
+      inboxGross,
       status: "ok",
       diff: 0,
     });
@@ -341,7 +408,7 @@ export function compareBooks(input: {
     });
   }
 
-  const kindOrder: Record<CategoryKind, number> = { income: 0, expense: 1, transfer: 2 };
+  const kindOrder: Record<CellKind, number> = { income: 0, expense: 1, inbox: 2, transfer: 3 };
   const byMonthThenSize = (a: Cell, b: Cell) =>
     a.month.localeCompare(b.month) || kindOrder[a.kind] - kindOrder[b.kind] || Math.abs(b.diff) - Math.abs(a.diff) || a.label.localeCompare(b.label);
   const mismatches = cells.filter((c) => Math.abs(c.diff) > tolerance).sort(byMonthThenSize);
@@ -353,9 +420,17 @@ export function compareBooks(input: {
   for (const m of months) {
     const diffs = [m.ours.net - m.qbo.net, m.ours.income - m.qbo.income, m.ours.expenses - m.qbo.expenses];
     const over = diffs.find((d) => Math.abs(d) > tolerance);
-    if (over === undefined) continue;
-    m.diff = over;
-    m.status = mismatches.some((c) => c.month === m.month) ? "cells" : "mismatch";
+    const cellsOff = mismatches.filter((c) => c.month === m.month);
+    if (over !== undefined) {
+      m.diff = over;
+      m.status = cellsOff.length ? "cells" : "mismatch";
+    }
+    // A gross shortfall is its own month mismatch unless this month's Inbox cell already shows it
+    // (counting both would add the same money twice).
+    if (inboxGrossShort(m, tolerance) && m.status !== "mismatch" && !cellsOff.some((c) => c.kind === "inbox")) {
+      m.diff = m.inboxGross.ours - m.inboxGross.qbo;
+      m.status = "mismatch";
+    }
   }
   const monthMismatches = months.filter((m) => m.status === "mismatch");
   const problems = [...pnl.problems];
@@ -394,11 +469,7 @@ function linesInCell(lines: OurLine[], c: Cell): OurLine[] {
   const { from, to } = c.column;
   return lines
     .filter((l) => l.date >= from && l.date <= to)
-    .filter((l) => {
-      if (c.key === UNCATEGORIZED_IN) return l.categoryId === null && l.amountCents >= 0;
-      if (c.key === UNCATEGORIZED_OUT) return l.categoryId === null && l.amountCents < 0;
-      return l.categoryId === c.key;
-    })
+    .filter((l) => (c.key === INBOX_KEY ? l.categoryId === null : l.categoryId === c.key))
     .sort((a, b) => a.date.localeCompare(b.date) || a.tx.description.localeCompare(b.tx.description));
 }
 
@@ -439,16 +510,51 @@ export function mismatchSummary(
 }
 
 /**
+ * A partial first or last month compares only the dates in the file's column, on both sides (our
+ * books are read for exactly those dates). Said right above the verdict, so a MATCH for "January"
+ * that only checked part of it can't be mistaken for the whole month.
+ */
+export function partialMonthWarning(columns: QboColumn[]): string | null {
+  const partial = columns.filter((c) => c.partial);
+  if (!partial.length) return null;
+  const parts = partial.map((c) => `${c.month} only from ${c.from} to ${c.to} ("${c.label}")`);
+  const rest = partial.length === 1 ? "the rest of that month was" : "the rest of those months was";
+  return `WARNING: partial month. Compared ${parts.join(" and ")}; ${rest} not checked.`;
+}
+
+/**
+ * True when part of the user or password in a DATABASE_URL would be read as the host. An unencoded
+ * "/", "?" or "#" in the user or password ends the authority early, so the real "@" lands in the
+ * path, query or fragment, or there is an "@" but no user. node-postgres parses the URL the same way,
+ * so printing the host, or connecting to it (its DNS error names the host), would leak that part.
+ * A string with an "@" that doesn't parse as a URL at all counts too: where its credentials end
+ * can't be told.
+ */
+export function databaseUrlMisread(url: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return url.includes("@");
+  }
+  return (url.includes("@") && !u.username) || `${u.pathname}${u.search}${u.hash}`.includes("@");
+}
+
+/**
  * Which database a DATABASE_URL points at, safe to print: host and database name only, never the
- * user or password. "pglite:<dir>" is the local embedded database.
+ * user or password, plus the Neon endpoint id (production and dev branches have the same host
+ * shape, and the endpoint tells them apart). "pglite:<dir>" is the local embedded database.
  */
 export function describeDatabase(url: string | undefined): string {
   if (!url) return "unknown (DATABASE_URL is not set)";
   if (url.startsWith("pglite:")) return `local PGlite (${url.slice("pglite:".length) || "in memory"}), not production`;
+  if (databaseUrlMisread(url)) return "unknown (DATABASE_URL isn't a URL)";
   try {
     const u = new URL(url);
     const name = decodeURIComponent(u.pathname.replace(/^\//, "")) || "(default database)";
-    return `${u.hostname}${u.port ? `:${u.port}` : ""}/${name}`;
+    const where = `${u.hostname}${u.port ? `:${u.port}` : ""}/${name}`;
+    const endpoint = u.hostname.endsWith(".neon.tech") ? /^(ep-[a-z0-9-]+?)(?:-pooler)?\./i.exec(u.hostname) : null;
+    return endpoint ? `${where} (Neon endpoint ${endpoint[1]})` : where;
   } catch {
     return "unknown (DATABASE_URL isn't a URL)";
   }
@@ -485,23 +591,42 @@ export function formatReport(
   }
 
   out.push("## By month", "");
-  out.push("Net Income QB is the file's own Net Income row; Income QB and Expenses QB add up its accounts.", "");
-  out.push("| Month | Income QB | Income ours | Diff | Expenses QB | Expenses ours | Diff | Net Income QB | Net ours | Diff | Totals |");
-  out.push("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|");
+  out.push(
+    "- Income and Expenses add up each side's money by our category, the same way on both sides: a QuickBooks income account mapped to one of our expense categories counts as a negative expense.",
+    "- Inbox net is our uncategorized money (money in − money out) against the QuickBooks accounts mapped to the Inbox (Uncategorized Income/Expense, Ask My Accountant). It is one net amount because those accounts net refunds inside one account. It is not in Income or Expenses.",
+    "- Net Income QB is the file's own Net Income row. Net = Income − Expenses + Inbox net.",
+    "",
+  );
+  out.push("| Month | Income QB | Income ours | Diff | Expenses QB | Expenses ours | Diff | Inbox net QB | Inbox net ours | Diff | Net Income QB | Net ours | Diff | Totals |");
+  out.push("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|");
   const status = { ok: "ok", cells: "off: see cells", mismatch: "MISMATCH" } as const;
   for (const m of r.months) {
     const d = (a: number, b: number) => signed(b - a);
     const netQb = m.qbo.netReported === null ? "not in file" : money(m.qbo.netReported);
     out.push(
-      `| ${md(m.column.label)} | ${money(m.qbo.income)} | ${money(m.ours.income)} | ${d(m.qbo.income, m.ours.income)} | ${money(m.qbo.expenses)} | ${money(m.ours.expenses)} | ${d(m.qbo.expenses, m.ours.expenses)} | ${netQb} | ${money(m.ours.net)} | ${d(m.qbo.net, m.ours.net)} | ${status[m.status]} |`,
+      `| ${md(m.column.label)} | ${money(m.qbo.income)} | ${money(m.ours.income)} | ${d(m.qbo.income, m.ours.income)} | ${money(m.qbo.expenses)} | ${money(m.ours.expenses)} | ${d(m.qbo.expenses, m.ours.expenses)} | ${money(m.qbo.inbox)} | ${money(m.ours.inbox)} | ${d(m.qbo.inbox, m.ours.inbox)} | ${netQb} | ${money(m.ours.net)} | ${d(m.qbo.net, m.ours.net)} | ${status[m.status]} |`,
     );
   }
   out.push("");
   if (r.monthMismatches.length) {
     out.push(
-      "A MISMATCH month is off by more than the tolerance with no mismatched cell to show for it: small cell differences adding up, or a Net Income row that disagrees with the file's accounts (see Problems).",
+      "A MISMATCH month is off by more than the tolerance with no mismatched cell to show for it: small cell differences adding up, a Net Income row that disagrees with the file's accounts (see Problems), or QuickBooks Inbox money our Inbox can't hold (below).",
       "",
     );
+  }
+  // Shortfalls within the tolerance are listed too: the tolerance allows them, it doesn't hide them.
+  const grossShort = r.months.filter((m) => m.inboxGross.qbo > m.inboxGross.ours);
+  if (grossShort.length) {
+    out.push("Inbox gross check: if the books agree, every dollar QuickBooks has in its accounts mapped to the Inbox is one of our Inbox rows.", "");
+    for (const m of grossShort) {
+      const feeds = r.cells.find((c) => c.month === m.month && c.key === INBOX_KEY)?.feeds ?? [];
+      const accounts = feeds.map((f) => `${f.account} ${money(f.cents)}`).join(", ");
+      const within = inboxGrossShort(m, r.toleranceCents) ? "" : ` (within the ${money(r.toleranceCents)} tolerance)`;
+      out.push(
+        `- ${m.column.label}: QuickBooks has ${money(m.inboxGross.qbo)} in accounts mapped to the Inbox (${accounts}; signs ignored), but our Inbox has only ${money(m.inboxGross.ours)} of money in and out. Netting them could hide that difference${within}.`,
+      );
+    }
+    out.push("");
   }
 
   out.push(`## Mismatched cells (${r.mismatches.length})`, "");
@@ -572,6 +697,8 @@ export function formatReport(
     out.push(`| ${md(m.fullName)} | ${SECTION_LABEL[m.account.section]} | ${md(target)} | ${how} |`);
   }
   out.push("");
+  const partial = partialMonthWarning(r.columns);
+  if (partial) out.push(partial);
   out.push(mismatchSummary(r));
   return out.join("\n") + "\n";
 }
