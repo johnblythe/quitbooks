@@ -292,9 +292,15 @@ describe("parseQboPnl: layout tolerance", () => {
     }
   });
 
-  it("won't pass over a header with a bad column to a later one when amounts sit between them", () => {
+  it("refuses a header with a bad column instead of passing over it to a later one", () => {
     const text = [",Jan 2026,Q1 2026,Total", "Income", "Sales,1.00,1.00,2.00", ",Jan 2026,Feb 2026,Total", "Income", "Sales,1.00,1.00,2.00", "Total Income,1.00,1.00,2.00", "Net Income,1.00,1.00,2.00"].join("\n");
     expect(() => parseQboPnl(text)).toThrow(/Line 1, column 3: the header "Q1 2026" isn't a month/);
+    // Even with no amounts between them: reading the second line's months would shift every column.
+    const twoHeaders = [",Jan 2026,Feb 2026,Totals", ",Feb 2026,Mar 2026,Total", "Income", "Booth Rent,100.00,200.00,300.00", "Total Income,100.00,200.00,300.00", "Net Income,100.00,200.00,300.00"].join("\n");
+    expect(() => parseQboPnl(twoHeaders)).toThrow(/Line 1, column 4: the header "Totals" isn't a month/);
+    // A date stamp before a header with a bad column: the error names the header, not the stamp.
+    const stampFirst = ["Sat, Nov 17, 2026 10:15 AM", ",Jan 2026,Feb 2026,Totals", "Income"].join("\n");
+    expect(() => parseQboPnl(stampFirst)).toThrow(/Line 2, column 4: the header "Totals" isn't a month/);
   });
 
   it("copes with an unquoted footer, a BOM and Windows line endings", () => {

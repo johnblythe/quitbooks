@@ -222,12 +222,13 @@ export type MonthTotals = {
    * - "cells": totals off, and this month's mismatched cells show where.
    * - "mismatch": off with no mismatched cell to show for it (e.g. small cell differences adding up,
    *   or the file's Net Income row disagreeing with its accounts), or the Inbox gross check failed
-   *   (never put down to cells). Counts as a mismatch.
+   *   and this month's Inbox cell doesn't show it. Counts as a mismatch.
    */
   status: "ok" | "cells" | "mismatch";
   /**
-   * The first of the net, income and expense differences (ours − QuickBooks) over the tolerance; else,
-   * when only the Inbox gross check fails, ours − QuickBooks of the Inbox gross; else 0.
+   * The first of the net, income and expense differences (ours − QuickBooks) over the tolerance; or,
+   * when the month is a "mismatch" only because of the Inbox gross check, ours − QuickBooks of the
+   * Inbox gross; else 0.
    */
   diff: number;
 };
@@ -419,10 +420,17 @@ export function compareBooks(input: {
   for (const m of months) {
     const diffs = [m.ours.net - m.qbo.net, m.ours.income - m.qbo.income, m.ours.expenses - m.qbo.expenses];
     const over = diffs.find((d) => Math.abs(d) > tolerance);
-    const grossShort = inboxGrossShort(m, tolerance);
-    if (over === undefined && !grossShort) continue;
-    m.diff = over ?? m.inboxGross.ours - m.inboxGross.qbo;
-    m.status = !grossShort && mismatches.some((c) => c.month === m.month) ? "cells" : "mismatch";
+    const cellsOff = mismatches.filter((c) => c.month === m.month);
+    if (over !== undefined) {
+      m.diff = over;
+      m.status = cellsOff.length ? "cells" : "mismatch";
+    }
+    // A gross shortfall is its own month mismatch unless this month's Inbox cell already shows it
+    // (counting both would add the same money twice).
+    if (inboxGrossShort(m, tolerance) && m.status !== "mismatch" && !cellsOff.some((c) => c.kind === "inbox")) {
+      m.diff = m.inboxGross.ours - m.inboxGross.qbo;
+      m.status = "mismatch";
+    }
   }
   const monthMismatches = months.filter((m) => m.status === "mismatch");
   const problems = [...pnl.problems];
@@ -606,14 +614,16 @@ export function formatReport(
       "",
     );
   }
-  const grossShort = r.months.filter((m) => inboxGrossShort(m, r.toleranceCents));
+  // Shortfalls within the tolerance are listed too: the tolerance allows them, it doesn't hide them.
+  const grossShort = r.months.filter((m) => m.inboxGross.qbo > m.inboxGross.ours);
   if (grossShort.length) {
     out.push("Inbox gross check: if the books agree, every dollar QuickBooks has in its accounts mapped to the Inbox is one of our Inbox rows.", "");
     for (const m of grossShort) {
       const feeds = r.cells.find((c) => c.month === m.month && c.key === INBOX_KEY)?.feeds ?? [];
       const accounts = feeds.map((f) => `${f.account} ${money(f.cents)}`).join(", ");
+      const within = inboxGrossShort(m, r.toleranceCents) ? "" : ` (within the ${money(r.toleranceCents)} tolerance)`;
       out.push(
-        `- ${m.column.label}: QuickBooks has ${money(m.inboxGross.qbo)} in accounts mapped to the Inbox (${accounts}; signs ignored), but our Inbox has only ${money(m.inboxGross.ours)} of money in and out. Netting them could hide that difference.`,
+        `- ${m.column.label}: QuickBooks has ${money(m.inboxGross.qbo)} in accounts mapped to the Inbox (${accounts}; signs ignored), but our Inbox has only ${money(m.inboxGross.ours)} of money in and out. Netting them could hide that difference${within}.`,
       );
     }
     out.push("");

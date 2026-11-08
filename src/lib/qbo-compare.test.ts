@@ -264,12 +264,68 @@ describe("compareBooks", () => {
       }
     });
 
-    it("counts the gross check as a month mismatch even when the month also has mismatched cells", () => {
+    it("counts the gross check as a month mismatch even when the month also has other mismatched cells", () => {
       const r = compareBooks({ pnl: bounced, categories: cats, lines: lines([tx("2026-01-05", 10100, "c-rent"), tx("2026-01-20", -4000, "c-util")]) });
       expect(r.mismatches.map((c) => [c.key, c.diff])).toEqual([["c-rent", 100]]);
-      expect(r.months[0]).toMatchObject({ status: "mismatch", diff: 100 });
+      // The $1 rent cell and the $1,000 the Inbox net can't show are two different differences.
+      expect(r.months[0]).toMatchObject({ status: "mismatch", diff: -100000 });
       expect(r.monthMismatches).toHaveLength(1);
-      expect(mismatchSummary(r)).toBe("2 mismatches (1 cell, 1 month total), total abs diff $2.00");
+      expect(mismatchSummary(r)).toBe("2 mismatches (1 cell, 1 month total), total abs diff $1,001.00");
+    });
+
+    it("doesn't count a gross shortfall twice when the month's Inbox cell already shows it", () => {
+      const onlyExpense = pnl([
+        "Income",
+        "Booth Rent,100.00,,100.00",
+        "Total Income,100.00,0.00,100.00",
+        "Expenses",
+        "Utilities,40.00,,40.00",
+        "Uncategorized Expense,300.00,,300.00",
+        "Total Expenses,340.00,0.00,340.00",
+        "Net Income,-240.00,0.00,-240.00",
+      ]);
+      const r = compareBooks({ pnl: onlyExpense, categories: cats, lines: lines(sorted) });
+      expect(r.mismatches.map((c) => [c.key, c.diff])).toEqual([[INBOX_KEY, 30000]]);
+      expect(r.months[0]).toMatchObject({ status: "cells", diff: 30000, inboxGross: { qbo: 30000, ours: 0 } });
+      expect(r.monthMismatches).toEqual([]);
+      expect(mismatchSummary(r)).toBe("1 mismatch, total abs diff $300.00");
+      expect(formatReport(r, { file: "p.csv", basis: "cash", readOnly: true, database: "test db" })).toContain("- Jan 2026: QuickBooks has $300.00");
+    });
+
+    it("keeps a month's own total difference when it also fails the gross check", () => {
+      // QuickBooks' Net Income row says $70 where its accounts add up to $60.
+      const offNet = pnl([
+        "Income",
+        "Booth Rent,100.00,,100.00",
+        "Uncategorized Income,500.00,,500.00",
+        "Total Income,600.00,0.00,600.00",
+        "Expenses",
+        "Utilities,40.00,,40.00",
+        "Uncategorized Expense,500.00,,500.00",
+        "Total Expenses,540.00,0.00,540.00",
+        "Net Income,70.00,0.00,70.00",
+      ]);
+      const r = compareBooks({ pnl: offNet, categories: cats, lines: lines(sorted) });
+      expect(r.mismatches).toEqual([]);
+      expect(r.months[0]).toMatchObject({ status: "mismatch", diff: -1000, inboxGross: { qbo: 100000, ours: 0 } });
+      expect(r.match).toBe(false);
+    });
+
+    it("lists a gross shortfall within the tolerance instead of hiding it", () => {
+      const small = pnl([
+        "Income",
+        "Uncategorized Income,2.50,,2.50",
+        "Total Income,2.50,0.00,2.50",
+        "Expenses",
+        "Uncategorized Expense,2.50,,2.50",
+        "Total Expenses,2.50,0.00,2.50",
+        "Net Income,0.00,0.00,0.00",
+      ]);
+      const r = compareBooks({ pnl: small, categories: cats, lines: lines([]), toleranceCents: 500 });
+      expect(r.match).toBe(true);
+      expect(formatReport(r, { file: "p.csv", basis: "cash", readOnly: true, database: "test db" })).toContain(
+        "but our Inbox has only $0.00 of money in and out. Netting them could hide that difference (within the $5.00 tolerance).",
+      );
     });
 
     it("matches the same file when both rows are in our Inbox, and allows the tolerance", () => {

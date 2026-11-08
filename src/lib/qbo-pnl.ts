@@ -227,9 +227,9 @@ type Frame =
 
 /**
  * The header is the first line whose cells after the first are all month labels or "Total", with at
- * least one month. A line that only looks like one (an unquoted date stamp whose "Nov 17" reads as a
- * month, or a real header with a bad column) is passed over; its problem is what's reported if no
- * header follows, or if any amount sits between it and the header (that money would go unread).
+ * least one month. An unquoted date stamp that only looks like one ("Nov 17" reads as a month) is
+ * passed over; its problem is what's reported if no header follows, or if any amount sits between it
+ * and the header (that money would go unread). Any other header-like line with a bad column is refused.
  */
 function findHeader(rows: string[][]): { index: number; columns: { col: number; column: QboColumn }[]; totalCol: number | null } {
   let firstError: { index: number; message: string } | null = null;
@@ -258,6 +258,8 @@ function findHeader(rows: string[][]): { index: number; columns: { col: number; 
       }
     }
     if (problem) {
+      // Only a date stamp is passed over; any other header-like line is the header, with a bad column.
+      if (!isDateStamp(rows[i])) throw new QboPnlParseError(problem);
       firstError ??= { index: i, message: problem };
       continue;
     }
