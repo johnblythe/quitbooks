@@ -420,6 +420,97 @@ describe("compareBooks", () => {
     });
   });
 
+  describe("mappings to spot-check: a QuickBooks account counted against a category of the other kind", () => {
+    const meta = { file: "p.csv", basis: "cash", readOnly: true, database: "test db" } as const;
+    const refunds = pnl([
+      "Income",
+      "Supplies Refunds,5.00,,5.00",
+      "Total Income,5.00,0.00,5.00",
+      "Expenses",
+      "Supplies,5.00,,5.00",
+      "Total Expenses,5.00,0.00,5.00",
+      "Net Income,0.00,0.00,0.00",
+    ]);
+    const toSupplies = () => resolveOverrides({ "Supplies Refunds": "Supplies" }, cats);
+
+    it("warns, and still MATCHes, when equal money in and out cancels inside the category and our books have neither", () => {
+      const r = compareBooks({ pnl: refunds, categories: cats, lines: lines([]), overrides: toSupplies() });
+      expect(r.match).toBe(true);
+      expect(r.mismatches).toEqual([]);
+      expect(r.crossDirection).toEqual([
+        { account: "Supplies Refunds", section: "income", categoryName: "Supplies", categoryKind: "expense", months: [{ month: "2026-01", label: "Jan 2026", cents: 500 }] },
+      ]);
+      const report = formatReport(r, meta);
+      expect(report).toContain("## Mappings to spot-check (1)");
+      expect(report).toContain("Equal amounts in and out can cancel inside that category and still match");
+      expect(report).toContain("- Supplies Refunds (Income) → Supplies (expense): Jan 2026 $5.00");
+      expect(report.indexOf("## Mappings to spot-check")).toBeLessThan(report.indexOf("## By month"));
+      expect(report.trimEnd().split("\n").at(-1)).toBe('MATCH: Jan 2026 to Feb 2026 (2 months); 1 mapping to spot-check (see "Mappings to spot-check")');
+    });
+
+    it("doesn't warn when the account has no money in the compared months", () => {
+      const p = pnl([
+        "Income",
+        "Supplies Refunds,,,0.00",
+        "Total Income,0.00,0.00,0.00",
+        "Expenses",
+        "Utilities,4.00,3.00,7.00",
+        "Total Expenses,4.00,3.00,7.00",
+        "Net Income,-4.00,-3.00,-7.00",
+      ]);
+      const books = lines([tx("2026-01-05", -400, "c-util"), tx("2026-02-05", -300, "c-util")]);
+      const r = compareBooks({ pnl: p, categories: cats, lines: books, overrides: toSupplies() });
+      expect(r.crossDirection).toEqual([]);
+      const report = formatReport(r, meta);
+      expect(report).not.toContain("Mappings to spot-check");
+      expect(report.trimEnd().split("\n").at(-1)).toBe("MATCH: Jan 2026 to Feb 2026 (2 months)");
+    });
+
+    it("lists only the compared months that have money", () => {
+      const p = pnl(["Income", "Supplies Refunds,,7.00,7.00", "Total Income,0.00,7.00,7.00", "Net Income,0.00,7.00,7.00"]);
+      const r = compareBooks({ pnl: p, categories: cats, lines: lines([tx("2026-02-03", 700, "c-supplies")]), overrides: toSupplies() });
+      expect(r.crossDirection.map((x) => x.months)).toEqual([[{ month: "2026-02", label: "Feb 2026", cents: 700 }]]);
+    });
+
+    it("doesn't warn for a same-direction mapping", () => {
+      const r = compareBooks({ pnl: simple, categories: cats, lines: lines(simpleBooks()) });
+      expect(r.crossDirection).toEqual([]);
+      expect(formatReport(r, meta)).not.toContain("Mappings to spot-check");
+    });
+
+    it("doesn't warn for an Inbox placeholder or a transfer category", () => {
+      const p = pnl([
+        "Income",
+        "Uncategorized Income,5.00,,5.00",
+        "Total Income,5.00,0.00,5.00",
+        "Expenses",
+        "Draws,50.00,,50.00",
+        "Total Expenses,50.00,0.00,50.00",
+        "Net Income,-45.00,0.00,-45.00",
+      ]);
+      // Draws is an expense account mapped to a transfer category, so the other kind in name only.
+      const r = compareBooks({ pnl: p, categories: cats, lines: lines([]), overrides: resolveOverrides({ Draws: "Owner Draw" }, cats) });
+      expect(r.crossDirection).toEqual([]);
+      const income = pnl(["Income", "Owner Deposit,5.00,,5.00", "Total Income,5.00,0.00,5.00", "Net Income,5.00,0.00,5.00"]);
+      const r2 = compareBooks({ pnl: income, categories: cats, lines: lines([]), overrides: resolveOverrides({ "Owner Deposit": "Owner Draw" }, cats) });
+      expect(r2.crossDirection).toEqual([]);
+      expect(formatReport(r2, meta)).not.toContain("Mappings to spot-check");
+    });
+
+    it("still warns on a mismatch run, and leaves the mismatch summary unchanged apart from the suffix", () => {
+      const books = lines([tx("2026-01-10", -300, "c-supplies")]);
+      const r = compareBooks({ pnl: refunds, categories: cats, lines: books, overrides: toSupplies() });
+      expect(r.match).toBe(false);
+      expect(r.crossDirection).toHaveLength(1);
+      const plain = mismatchSummary({ ...r, crossDirection: [] });
+      expect(mismatchSummary(r)).toBe(`${plain}; 1 mapping to spot-check (see "Mappings to spot-check")`);
+      expect(plain).toMatch(/^\d+ mismatch/);
+      const report = formatReport(r, meta);
+      expect(report).toContain("## Mappings to spot-check (1)");
+      expect(report.trimEnd().split("\n").at(-1)).toBe(mismatchSummary(r));
+    });
+  });
+
   it("checks month income and expenses on their own, not only the net", () => {
     const p = pnl([
       "Income",
