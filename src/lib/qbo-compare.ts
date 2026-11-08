@@ -4,7 +4,8 @@
  * qbo-compare-db.ts and the CLI in scripts/qbo-compare.ts.
  *
  * Our numbers come from `computePnl` over ledger lines (splits expanded), so this measures exactly
- * what the app's P&L shows: transfers left out, uncategorized money counted as "Uncategorized".
+ * what the app's P&L shows: transfers left out, and uncategorized money netted into one Inbox cell
+ * per month (see INBOX_KEY), with a gross check so netting can't hide money.
  * The comparison is at OUR category level: several QuickBooks accounts may feed one category.
  */
 import type { MonthKey } from "./dates";
@@ -173,7 +174,10 @@ export type CellKind = CategoryKind | "inbox";
 export type Cell = {
   month: MonthKey;
   column: QboColumn;
-  /** Our category id, INBOX_KEY, or "qbo:<account>" for an unmapped account. */
+  /**
+   * Our category id, INBOX_KEY, or "qbo:<income|expense>:<account>" for an unmapped account (by
+   * direction, so a same-named account in Income and in Expenses stays two cells).
+   */
   key: string;
   label: string;
   kind: CellKind;
@@ -205,16 +209,50 @@ export type MonthTotals = {
   /** `net` is our P&L's net, transfers left out and uncategorized money in. */
   ours: { income: number; expenses: number; inbox: number; net: number };
   /**
-   * Income, expenses or net differ by more than the tolerance.
-   * - "ok": all three are within it.
-   * - "cells": off, and this month's mismatched cells show where.
+   * The Inbox without netting. QuickBooks: each Inbox-mapped account's month amount, signs ignored,
+   * added up. Ours: Inbox money in plus money out. When the books agree, every QuickBooks placeholder
+   * dollar is one of our Inbox rows, so QuickBooks' can't be more than ours. If it is (beyond the
+   * tolerance), netting may be hiding money, e.g. the same $500 in Uncategorized Income and in
+   * Uncategorized Expense with nothing in our Inbox: the month is a "mismatch".
+   */
+  inboxGross: { qbo: number; ours: number };
+  /**
+   * Income, expenses or net differ by more than the tolerance, or the Inbox gross check fails.
+   * - "ok": none of that.
+   * - "cells": totals off, and this month's mismatched cells show where.
    * - "mismatch": off with no mismatched cell to show for it (e.g. small cell differences adding up,
-   *   or the file's Net Income row disagreeing with its accounts). Counts as a mismatch.
+   *   or the file's Net Income row disagreeing with its accounts), or the Inbox gross check failed
+   *   (never put down to cells). Counts as a mismatch.
    */
   status: "ok" | "cells" | "mismatch";
-  /** The first of the net, income and expense differences (ours − QuickBooks) over the tolerance, or 0. */
+  /**
+   * The first of the net, income and expense differences (ours − QuickBooks) over the tolerance; else,
+   * when only the Inbox gross check fails, ours − QuickBooks of the Inbox gross; else 0.
+   */
   diff: number;
 };
+
+/** QuickBooks' Inbox gross is more than ours by more than the tolerance (see MonthTotals.inboxGross). */
+function inboxGrossShort(m: Pick<MonthTotals, "inboxGross">, tolerance: number): boolean {
+  return m.inboxGross.qbo - m.inboxGross.ours > tolerance;
+}
+
+type Buckets = { income: number; expenses: number; inbox: number; net: number };
+
+/**
+ * Every dollar on each side must land in exactly one of income, expenses and the Inbox: income −
+ * expenses + Inbox must be the side's net (for QuickBooks, recomputed from its accounts). Throws
+ * otherwise, because then something was dropped or counted twice and nothing can be trusted.
+ */
+export function checkMonthAddsUp(label: string, qbo: Buckets, ours: Buckets): void {
+  for (const [side, b] of [["the QuickBooks side", qbo], ["our side", ours]] as const) {
+    if (b.income - b.expenses + b.inbox !== b.net) {
+      throw new Error(
+        `qbo:compare bug: ${label}: ${side} doesn't add up (income ${formatCents(b.income)} − expenses ${formatCents(b.expenses)} + Inbox ${formatCents(b.inbox)} isn't the net ${formatCents(b.net)}), so nothing can be trusted.`,
+      );
+    }
+  }
+}
 
 export type InboxMonth = { month: MonthKey; column: QboColumn; inCents: number; inCount: number; outCents: number; outCount: number };
 
@@ -284,10 +322,12 @@ export function compareBooks(input: {
       return c;
     };
 
+    const inboxGross = { qbo: 0, ours: 0 };
     for (const line of [...ours.income, ...ours.expenses]) {
       if (line.categoryId === UNCATEGORIZED_IN || line.categoryId === UNCATEGORIZED_OUT) {
         // computePnl reports both directions as positive amounts; the Inbox cell is net.
         cell(INBOX_KEY, INBOX_LABEL, "inbox").ours += line.categoryId === UNCATEGORIZED_IN ? line.cents : -line.cents;
+        inboxGross.ours += line.cents;
         continue;
       }
       const cat = byId.get(line.categoryId)!;
@@ -305,11 +345,12 @@ export function compareBooks(input: {
       let c: Cell;
       let signed = cents;
       if (!m.target) {
-        c = cell(`qbo:${m.fullName}`, `QuickBooks "${m.fullName}" (not mapped)`, dir);
+        c = cell(`qbo:${dir}:${m.fullName}`, `QuickBooks "${m.fullName}" (not mapped)`, dir);
         c.note = `Not mapped to any of our categories. Add it to --map.`;
       } else if (m.target.type === "inbox") {
         c = cell(INBOX_KEY, INBOX_LABEL, "inbox");
         if (dir === "expense") signed = -cents;
+        inboxGross.qbo += Math.abs(cents);
       } else {
         const cat = byId.get(m.target.categoryId)!;
         c = cell(cat.id, cat.name, cat.kind);
@@ -340,16 +381,14 @@ export function compareBooks(input: {
       qbo[bucket[c.kind]] += c.qbo;
       our[bucket[c.kind]] += c.ours;
     }
-    // Every dollar on each side must land in exactly one of income, expenses and the Inbox.
-    if (qbo.income - qbo.expenses + qbo.inbox !== netComputed || our.income - our.expenses + our.inbox !== ours.net) {
-      throw new Error(`qbo:compare bug: ${column.label} doesn't add up across income, expenses and the Inbox, so nothing can be trusted.`);
-    }
+    checkMonthAddsUp(column.label, { ...qbo, net: netComputed }, { ...our, net: ours.net });
     const reported = netIncomeRow ? netIncomeRow.cents[month] ?? 0 : null;
     months.push({
       month,
       column,
       qbo: { ...qbo, net: reported ?? netComputed, netReported: reported, netComputed },
       ours: { ...our, net: ours.net },
+      inboxGross,
       status: "ok",
       diff: 0,
     });
@@ -380,9 +419,10 @@ export function compareBooks(input: {
   for (const m of months) {
     const diffs = [m.ours.net - m.qbo.net, m.ours.income - m.qbo.income, m.ours.expenses - m.qbo.expenses];
     const over = diffs.find((d) => Math.abs(d) > tolerance);
-    if (over === undefined) continue;
-    m.diff = over;
-    m.status = mismatches.some((c) => c.month === m.month) ? "cells" : "mismatch";
+    const grossShort = inboxGrossShort(m, tolerance);
+    if (over === undefined && !grossShort) continue;
+    m.diff = over ?? m.inboxGross.ours - m.inboxGross.qbo;
+    m.status = !grossShort && mismatches.some((c) => c.month === m.month) ? "cells" : "mismatch";
   }
   const monthMismatches = months.filter((m) => m.status === "mismatch");
   const problems = [...pnl.problems];
@@ -475,6 +515,24 @@ export function partialMonthWarning(columns: QboColumn[]): string | null {
 }
 
 /**
+ * True when part of the user or password in a DATABASE_URL would be read as the host. An unencoded
+ * "/", "?" or "#" in the user or password ends the authority early, so the real "@" lands in the
+ * path, query or fragment, or there is an "@" but no user. node-postgres parses the URL the same way,
+ * so printing the host, or connecting to it (its DNS error names the host), would leak that part.
+ * A string with an "@" that doesn't parse as a URL at all counts too: where its credentials end
+ * can't be told.
+ */
+export function databaseUrlMisread(url: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return url.includes("@");
+  }
+  return (url.includes("@") && !u.username) || `${u.pathname}${u.search}${u.hash}`.includes("@");
+}
+
+/**
  * Which database a DATABASE_URL points at, safe to print: host and database name only, never the
  * user or password, plus the Neon endpoint id (production and dev branches have the same host
  * shape, and the endpoint tells them apart). "pglite:<dir>" is the local embedded database.
@@ -482,11 +540,9 @@ export function partialMonthWarning(columns: QboColumn[]): string | null {
 export function describeDatabase(url: string | undefined): string {
   if (!url) return "unknown (DATABASE_URL is not set)";
   if (url.startsWith("pglite:")) return `local PGlite (${url.slice("pglite:".length) || "in memory"}), not production`;
+  if (databaseUrlMisread(url)) return "unknown (DATABASE_URL isn't a URL)";
   try {
     const u = new URL(url);
-    // A password with an unencoded "/", "?" or "#" makes the URL read the user (and part of the
-    // password) as the host: there is an "@" but no user. Say nothing rather than print them.
-    if ((url.includes("@") && !u.username) || u.pathname.includes("@")) return "unknown (DATABASE_URL isn't a URL)";
     const name = decodeURIComponent(u.pathname.replace(/^\//, "")) || "(default database)";
     const where = `${u.hostname}${u.port ? `:${u.port}` : ""}/${name}`;
     const endpoint = u.hostname.endsWith(".neon.tech") ? /^(ep-[a-z0-9-]+?)(?:-pooler)?\./i.exec(u.hostname) : null;
@@ -546,9 +602,21 @@ export function formatReport(
   out.push("");
   if (r.monthMismatches.length) {
     out.push(
-      "A MISMATCH month is off by more than the tolerance with no mismatched cell to show for it: small cell differences adding up, or a Net Income row that disagrees with the file's accounts (see Problems).",
+      "A MISMATCH month is off by more than the tolerance with no mismatched cell to show for it: small cell differences adding up, a Net Income row that disagrees with the file's accounts (see Problems), or QuickBooks Inbox money our Inbox can't hold (below).",
       "",
     );
+  }
+  const grossShort = r.months.filter((m) => inboxGrossShort(m, r.toleranceCents));
+  if (grossShort.length) {
+    out.push("Inbox gross check: if the books agree, every dollar QuickBooks has in its accounts mapped to the Inbox is one of our Inbox rows.", "");
+    for (const m of grossShort) {
+      const feeds = r.cells.find((c) => c.month === m.month && c.key === INBOX_KEY)?.feeds ?? [];
+      const accounts = feeds.map((f) => `${f.account} ${money(f.cents)}`).join(", ");
+      out.push(
+        `- ${m.column.label}: QuickBooks has ${money(m.inboxGross.qbo)} in accounts mapped to the Inbox (${accounts}; signs ignored), but our Inbox has only ${money(m.inboxGross.ours)} of money in and out. Netting them could hide that difference.`,
+      );
+    }
+    out.push("");
   }
 
   out.push(`## Mismatched cells (${r.mismatches.length})`, "");

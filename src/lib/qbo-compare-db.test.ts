@@ -479,9 +479,9 @@ describe("the CLI (npm run qbo:compare)", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  const cli = (args: string[]) => {
+  const cli = (args: string[], databaseUrl = `pglite:${join(dir, "pglite")}`) => {
     const res = spawnSync(process.execPath, ["--import", "tsx", "scripts/qbo-compare.ts", ...args], {
-      env: { ...process.env, DATABASE_URL: `pglite:${join(dir, "pglite")}` },
+      env: { ...process.env, DATABASE_URL: databaseUrl },
       encoding: "utf8",
       maxBuffer: 64 * 1024 * 1024,
     });
@@ -530,6 +530,22 @@ describe("the CLI (npm run qbo:compare)", () => {
     const missing = cli([join(dir, "no-such-file.csv")]);
     expect(missing.code).toBe(2);
     expect(missing.out).toBe("");
+  }, 60_000);
+
+  it("refuses a DATABASE_URL whose user or password would be misread as the host, before connecting", () => {
+    // Each would make the driver look up "pwfrag.invalid" or "usrfrag.invalid" (part of the
+    // password or the user) as the host, and its error would print it.
+    for (const url of [
+      "postgresql://quitbooks_owner:Tr0ub@pwfrag.invalid?2026@127.0.0.1:1/quitbooks",
+      "postgresql://quitbooks_owner:k9@pwfrag.invalid#Lm2@127.0.0.1:1/quitbooks",
+      "postgresql://usrfrag.invalid:1234/s3cret@127.0.0.1:1/quitbooks",
+    ]) {
+      const r = cli(["fixtures/qbo-pnl-by-month.sample.csv"], url);
+      expect(r.code).toBe(2);
+      expect(r.out).toBe("");
+      expect(r.err).toMatch(/can't be read safely.*percent-encode @ \/ \? #/i);
+      expect(r.err).not.toMatch(/pwfrag|usrfrag|Tr0ub|k9|Lm2|s3cret|quitbooks_owner|ENOTFOUND|Reading our books/);
+    }
   }, 60_000);
 
   it("prints a report far over 64 KB in full, verdict line last", () => {

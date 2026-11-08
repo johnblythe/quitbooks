@@ -24,7 +24,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import { scriptDb } from "./db";
-import { describeDatabase, parseCompareArgs, QboCompareInputError } from "../src/lib/qbo-compare";
+import { databaseUrlMisread, describeDatabase, parseCompareArgs, QboCompareInputError } from "../src/lib/qbo-compare";
 import { runQboCompare } from "../src/lib/qbo-compare-db";
 import { QboPnlParseError } from "../src/lib/qbo-pnl";
 
@@ -40,9 +40,16 @@ async function main(): Promise<number> {
     }
   }
 
+  // .env is already loaded (scripts/db.ts imports dotenv/config). Refuse before connecting: the
+  // driver would look up part of the user or password as the host, and its error would print it.
+  const url = process.env.DATABASE_URL;
+  if (url && !url.startsWith("pglite:") && databaseUrlMisread(url)) {
+    throw new QboCompareInputError(
+      "DATABASE_URL can't be read safely: part of its user or password would be taken for the host. Percent-encode @ / ? # (and spaces) in the user and password, e.g. @ as %40. Nothing was read.",
+    );
+  }
   const { db, close } = await scriptDb();
-  // After scriptDb, so a DATABASE_URL loaded from .env is the one described.
-  const database = describeDatabase(process.env.DATABASE_URL);
+  const database = describeDatabase(url);
   console.error(`Reading our books from ${database} (read only)`);
   try {
     const run = await runQboCompare(db, {

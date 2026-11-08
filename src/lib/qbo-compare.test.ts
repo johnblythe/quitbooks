@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { expandLedgerLines, type LedgerSplit } from "./ledger";
 import {
+  checkMonthAddsUp,
   compareBooks,
+  databaseUrlMisread,
   describeDatabase,
   formatReport,
   INBOX_KEY,
@@ -233,6 +235,65 @@ describe("compareBooks", () => {
       expect(r.months[0]).toMatchObject({ status: "mismatch", diff: 800 });
       expect(r.match).toBe(false);
     });
+
+    // QuickBooks left a bounced $500 in both Uncategorized Income and Uncategorized Expense: they net to 0.
+    const bounced = pnl([
+      "Income",
+      "Booth Rent,100.00,,100.00",
+      "Uncategorized Income,500.00,,500.00",
+      "Total Income,600.00,0.00,600.00",
+      "Expenses",
+      "Utilities,40.00,,40.00",
+      "Uncategorized Expense,500.00,,500.00",
+      "Total Expenses,540.00,0.00,540.00",
+      "Net Income,60.00,0.00,60.00",
+    ]);
+    const sorted = [tx("2026-01-05", 10000, "c-rent"), tx("2026-01-20", -4000, "c-util")];
+
+    it("can't net away QuickBooks Inbox money that our Inbox doesn't hold (gross check)", () => {
+      // Our books have neither $500, or sorted both to a transfer category: the nets agree (0 = 0).
+      for (const extra of [[], [tx("2026-01-10", 50000, "c-draw"), tx("2026-01-11", -50000, "c-draw")]]) {
+        const r = compareBooks({ pnl: bounced, categories: cats, lines: lines([...sorted, ...extra]) });
+        expect(r.mismatches).toEqual([]);
+        expect(r.months[0]).toMatchObject({ status: "mismatch", diff: -100000, inboxGross: { qbo: 100000, ours: 0 } });
+        expect(r.match).toBe(false);
+        expect(mismatchSummary(r)).toBe("1 mismatch (1 month total), total abs diff $1,000.00");
+        expect(formatReport(r, { file: "p.csv", basis: "cash", readOnly: true, database: "test db" })).toContain(
+          "- Jan 2026: QuickBooks has $1,000.00 in accounts mapped to the Inbox (Uncategorized Income $500.00, Uncategorized Expense -$500.00; signs ignored), but our Inbox has only $0.00 of money in and out. Netting them could hide that difference.",
+        );
+      }
+    });
+
+    it("matches the same file when both rows are in our Inbox, and allows the tolerance", () => {
+      const both = [...sorted, tx("2026-01-10", 50000, null), tx("2026-01-11", -50000, null)];
+      const r = compareBooks({ pnl: bounced, categories: cats, lines: lines(both) });
+      expect(r.months[0]).toMatchObject({ status: "ok", inboxGross: { qbo: 100000, ours: 100000 } });
+      expect(r.match).toBe(true);
+      // $5 short of QuickBooks' gross: within a $5 tolerance, and not within $4.99.
+      const short = [...sorted, tx("2026-01-10", 49750, null), tx("2026-01-11", -49750, null)];
+      expect(compareBooks({ pnl: bounced, categories: cats, lines: lines(short), toleranceCents: 500 }).match).toBe(true);
+      expect(compareBooks({ pnl: bounced, categories: cats, lines: lines(short), toleranceCents: 499 }).months[0].status).toBe("mismatch");
+    });
+  });
+
+  it("keeps unmapped same-name accounts in Income and Expenses apart", () => {
+    const p = pnl([
+      "Income",
+      "Booth Rent,100.00,,100.00",
+      "Misc,10.00,,10.00",
+      "Total Income,110.00,0.00,110.00",
+      "Expenses",
+      "Misc,4.00,,4.00",
+      "Total Expenses,4.00,0.00,4.00",
+      "Net Income,106.00,0.00,106.00",
+    ]);
+    const r = compareBooks({ pnl: p, categories: cats, lines: lines([tx("2026-01-05", 10000, "c-rent")]) });
+    expect(r.mismatches.map((c) => [c.key, c.kind, c.qbo, c.ours])).toEqual([
+      ["qbo:income:Misc", "income", 1000, 0],
+      ["qbo:expense:Misc", "expense", 400, 0],
+    ]);
+    expect(r.months[0].qbo).toMatchObject({ income: 11000, expenses: 400, net: 10600 });
+    expect(r.match).toBe(false);
   });
 
   it("expands splits: each line counts in its own category", () => {
@@ -331,7 +392,7 @@ describe("compareBooks", () => {
     expect(r.unmapped.map((m) => m.fullName)).toEqual(["Mystery Account"]);
     expect(r.unmatchedCategories.map((u) => [u.category.name, u.cents])).toEqual([["Supplies", 700]]);
     expect(r.mismatches.map((c) => [c.key, c.label, c.qbo, c.ours, c.note])).toEqual([
-      ["qbo:Mystery Account", `QuickBooks "Mystery Account" (not mapped)`, 700, 0, "Not mapped to any of our categories. Add it to --map."],
+      ["qbo:expense:Mystery Account", `QuickBooks "Mystery Account" (not mapped)`, 700, 0, "Not mapped to any of our categories. Add it to --map."],
       ["c-supplies", "Supplies", 0, 700, null],
     ]);
     const report = formatReport(r, { file: "p.csv", basis: "cash", readOnly: true, database: "test db" });
@@ -498,6 +559,24 @@ describe("the verdict says MATCH only when every dollar was compared", () => {
   });
 });
 
+describe("checkMonthAddsUp: every dollar lands in exactly one of income, expenses and the Inbox", () => {
+  const ok = { income: 10000, expenses: 4000, inbox: -1000, net: 5000 };
+
+  it("passes when both sides add up to their net", () => {
+    expect(() => checkMonthAddsUp("Jan 2026", ok, ok)).not.toThrow();
+  });
+
+  it("throws when the QuickBooks side doesn't add up", () => {
+    expect(() => checkMonthAddsUp("Jan 2026", { ...ok, net: 5001 }, ok)).toThrow(
+      "qbo:compare bug: Jan 2026: the QuickBooks side doesn't add up (income $100.00 − expenses $40.00 + Inbox -$10.00 isn't the net $50.01), so nothing can be trusted.",
+    );
+  });
+
+  it("throws when our side doesn't add up", () => {
+    expect(() => checkMonthAddsUp("Jan 2026", ok, { ...ok, inbox: 0 })).toThrow(/qbo:compare bug: Jan 2026: our side doesn't add up/);
+  });
+});
+
 describe("describeDatabase", () => {
   it("names the host and database, never the user or password", () => {
     const d = describeDatabase("postgresql://quitbooks_owner:s3cret-pw@ep-snowy-queen-123-pooler.us-east-1.aws.neon.tech/quitbooks?sslmode=require");
@@ -520,6 +599,32 @@ describe("describeDatabase", () => {
       const d = describeDatabase(url);
       expect(d).toBe("unknown (DATABASE_URL isn't a URL)");
       expect(d).not.toMatch(/s3cret|quitbooks_owner|1234/);
+    }
+  });
+
+  it.each([
+    // An unencoded "@" in the password or user, then "?" or "#": the parser keeps a user, and the
+    // real "@" ends up in the query or fragment.
+    ["postgresql://quitbooks_owner:Tr0ub@dor?2026@ep-cool-dew-a1b2c3-pooler.us-east-1.aws.neon.tech/quitbooks?sslmode=require", ["Tr0ub", "dor", "2026"]],
+    ["postgresql://quitbooks_owner:k9@x#Lm2@ep-cool-dew-a1b2c3.us-east-1.aws.neon.tech/quitbooks", ["k9", "x", "Lm2"]],
+    ["postgres://USRx:PWa@PWb/PWc?@HOSTA.example.com/db", ["USRx", "PWa", "PWb", "PWc"]],
+    ["postgresql://admin@myserver:12?ab@myserver.postgres.database.azure.com/db", ["admin", "myserver", "ab"]],
+    ["postgresql://user:sec@ret?x@ep-cool-1.us-east-2.aws.neon.tech/db", ["sec", "ret"]],
+    ["postgresql://user:a@b#c@host.example.com/db", ["b/", "b#"]],
+  ])("never prints a fragment of the user or password: %s", (url, fragments) => {
+    expect(databaseUrlMisread(url)).toBe(true);
+    const d = describeDatabase(url);
+    expect(d).toBe("unknown (DATABASE_URL isn't a URL)");
+    for (const f of fragments) expect(d).not.toContain(f);
+  });
+
+  it("doesn't call a well-formed URL misread", () => {
+    for (const url of [
+      "postgresql://quitbooks_owner:s3cret-pw@ep-snowy-queen-123-pooler.us-east-1.aws.neon.tech/quitbooks?sslmode=require&channel_binding=require",
+      "postgres://u:p%40ss%3Fw%23rd@localhost:5433/books",
+      "postgresql://localhost/books",
+    ]) {
+      expect(databaseUrlMisread(url)).toBe(false);
     }
   });
 
