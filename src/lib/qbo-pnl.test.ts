@@ -26,7 +26,7 @@ describe("parseColumnLabel", () => {
     // What Excel writes for "Jan 2026" when the file is opened and re-saved.
     ["Jan-26", "2026-01", "2026-01-01", "2026-01-31", false],
     ["Jan 26", "2026-01", "2026-01-01", "2026-01-31", false],
-    ["Sept-26", "2026-09", "2026-09-01", "2026-09-30", false],
+    ["Sep-26", "2026-09", "2026-09-01", "2026-09-30", false],
     ["January-2026", "2026-01", "2026-01-01", "2026-01-31", false],
   ])("reads %s", (label, month, from, to, partial) => {
     expect(parseColumnLabel(label)).toEqual({ column: { label, month, from, to, partial } });
@@ -37,7 +37,9 @@ describe("parseColumnLabel", () => {
     expect(parseColumnLabel("Feb 1-30, 2026")).toEqual({ error: expect.stringContaining("isn't a real date range") });
   });
 
-  it.each(["Total", "Q1 2026", "2026", "Week 1", "Jan 1, 2026 - Feb 1, 2026", "", "Jan-6", "Jan-202", "Foo-26"])("ignores %s", (label) => {
+  // A two-digit year only in Excel's own "mmm-yy" form: a 3-letter month. "November 17" (from an
+  // unquoted date stamp) is not November 2017.
+  it.each(["Total", "Q1 2026", "2026", "Week 1", "Jan 1, 2026 - Feb 1, 2026", "", "Jan-6", "Jan-202", "Foo-26", "November 17", "Sept-26", "January-26"])("ignores %s", (label) => {
     expect(parseColumnLabel(label)).toBeNull();
   });
 });
@@ -278,6 +280,23 @@ describe("parseQboPnl: layout tolerance", () => {
     }
   });
 
+  it("skips an unquoted date stamp in the preamble or the footer, even where it looks like a month", () => {
+    const body = ["Income", "Sales,10.00,20.00,30.00", "Total Income,10.00,20.00,30.00", "Net Income,10.00,20.00,30.00"];
+    // Unquoted, "November 17" and "Nov 17" land in column 2, under where the months go.
+    for (const stamp of ["Saturday, November 17, 2026 10:15 AM GMT-05:00", "Sat, Nov 17, 2026 10:15 AM"]) {
+      const preamble = ["Salon LLC", "Profit and Loss", stamp, "Cash Basis", "", ",Jan 2026,Feb 2026,Total", ...body].join("\n");
+      const p = parseQboPnl(preamble);
+      expect([p.months, p.basis, p.problems, p.accounts.length]).toEqual([["2026-01", "2026-02"], "cash", [], 1]);
+      const footer = parseQboPnl(report(body).replace('"Cash Basis Saturday, November 7, 2026 10:00 AM GMT-05:00"', `Cash Basis\n${stamp}`));
+      expect([footer.months, footer.basis, footer.problems, footer.accounts.length]).toEqual([["2026-01", "2026-02"], "cash", [], 1]);
+    }
+  });
+
+  it("won't pass over a header with a bad column to a later one when amounts sit between them", () => {
+    const text = [",Jan 2026,Q1 2026,Total", "Income", "Sales,1.00,1.00,2.00", ",Jan 2026,Feb 2026,Total", "Income", "Sales,1.00,1.00,2.00", "Total Income,1.00,1.00,2.00", "Net Income,1.00,1.00,2.00"].join("\n");
+    expect(() => parseQboPnl(text)).toThrow(/Line 1, column 3: the header "Q1 2026" isn't a month/);
+  });
+
   it("copes with an unquoted footer, a BOM and Windows line endings", () => {
     const text = "\uFEFF" + report(["Income", "Sales,10.00,10.00,20.00", "Total Income,10.00,10.00,20.00", "Net Income,10.00,10.00,20.00"])
       .replace('"Cash Basis Saturday, November 7, 2026 10:00 AM GMT-05:00"', "Cash Basis Saturday, November 7, 2026 10:00 AM")
@@ -377,6 +396,20 @@ describe("parseQboPnl: money it can't place fails the run, with the line", () =>
 
   it("refuses an account that looks like the Cash Basis footer", () => {
     expect(() => parseQboPnl(expenses(["Cash Basis Adjustment,25.00,,25.00"]))).toThrow(/Line 7: "Cash Basis Adjustment" has amounts but looks like the "Cash Basis" footer/);
+  });
+
+  it("refuses a Cash Basis row with amounts outside any section, e.g. after Net Income", () => {
+    const body = ["Income", "Sales,10.00,10.00,20.00", "Total Income,10.00,10.00,20.00", "Net Income,10.00,10.00,20.00"];
+    expect(() => parseQboPnl(report([...body, "Cash Basis Adjustment,500.00,500.00,1000.00"]))).toThrow(
+      /Line 10: "Cash Basis Adjustment" has amounts but looks like the "Cash Basis" footer/,
+    );
+    expect(() => parseQboPnl(report(["Cash Basis Adjustment,500.00,,500.00", ...body]))).toThrow(/Line 6: "Cash Basis Adjustment" has amounts/);
+    // The real footer, unquoted across three months, still has no amounts in it.
+    const three = report(["Income", "Sales,1.00,1.00,1.00,3.00", "Total Income,1.00,1.00,1.00,3.00", "Net Income,1.00,1.00,1.00,3.00"], ",Jan 2026,Feb 2026,Mar 2026,Total").replace(
+      '"Cash Basis Saturday, November 7, 2026 10:00 AM GMT-05:00"',
+      "Cash Basis Saturday, November 7, 2026 10:00 AM GMT-05:00",
+    );
+    expect(parseQboPnl(three)).toMatchObject({ basis: "cash", problems: [] });
   });
 
   it("refuses amounts outside any section", () => {

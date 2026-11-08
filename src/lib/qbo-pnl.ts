@@ -107,12 +107,14 @@ const pad = (n: number) => String(n).padStart(2, "0");
  * A month column header, or why it can't be one. Null when the text isn't month-shaped at all.
  * Accepts "Jan 2026", "January 2026", "Sept 2026", "Oct 1-15, 2026", "Oct 1 - Oct 15, 2026" and
  * "Oct 1, 2026" (one day). Also the month-year forms a file gets when it is opened and re-saved in
- * Excel: "Jan-26", "Jan 26", "Jan-2026". A two-digit year is 20xx; the column checks still apply.
+ * Excel: "Jan-2026", and Excel's "mmm-yy", "Jan-26" or "Jan 26". A two-digit year is 20xx and needs
+ * a 3-letter month, so "November 17" from an unquoted date stamp isn't read as November 2017. The
+ * column checks still apply.
  */
 export function parseColumnLabel(raw: string): { column: QboColumn } | { error: string } | null {
   const label = raw.replace(/\s+/g, " ").trim();
 
-  const whole = /^([A-Za-z]+)\.?[ -](\d{2}|\d{4})$/.exec(label);
+  const whole = /^([A-Za-z]+)\.?[ -](\d{4})$/.exec(label) ?? /^([A-Za-z]{3})[ -](\d{2})$/.exec(label);
   if (whole) {
     const mo = monthNumber(whole[1]);
     if (!mo) return null;
@@ -178,7 +180,10 @@ type Row = {
   hasAmounts: boolean;
   /** The Total column's amount, or null when blank. */
   totalCell: number | null;
-  /** Why the row's cells can't be read as amounts (thrown unless the row turns out to be the footer). */
+  /**
+   * Why the row's cells can't be read as amounts. Thrown, unless the row is skipped before that: the
+   * "Cash Basis ..." footer with no amounts, or a date stamp after Net Income outside any section.
+   */
   bad: string | null;
   /** Set on "Total X" / "Total for X" rows. */
   totalName: string | null;
@@ -220,38 +225,50 @@ type Frame =
   | { kind: "section"; section: QboSection; label: string; line: number; sum: number[] }
   | { kind: "group"; label: string; path: string[]; line: number; sum: number[]; closeBy: "total" | "indent"; indent: number };
 
+/**
+ * The header is the first line whose cells after the first are all month labels or "Total", with at
+ * least one month. A line that only looks like one (an unquoted date stamp whose "Nov 17" reads as a
+ * month, or a real header with a bad column) is passed over; its problem is what's reported if no
+ * header follows, or if any amount sits between it and the header (that money would go unread).
+ */
 function findHeader(rows: string[][]): { index: number; columns: { col: number; column: QboColumn }[]; totalCol: number | null } {
-  let firstError: string | null = null;
+  let firstError: { index: number; message: string } | null = null;
   for (let i = 0; i < Math.min(rows.length, 40); i++) {
     const cells = rows[i].map((c) => c.trim());
     const results = cells.map((text, col) => ({ col, text, res: col > 0 && text ? parseColumnLabel(text) : null }));
     if (!results.some((r) => r.res && "column" in r.res)) {
       const bad = results.find((r) => r.res && "error" in r.res)?.res as { error: string } | undefined;
-      if (bad && !firstError) firstError = `Line ${i + 1}: ${bad.error}`;
+      if (bad && !firstError) firstError = { index: i, message: `Line ${i + 1}: ${bad.error}` };
       continue;
     }
     const columns: { col: number; column: QboColumn }[] = [];
     let totalCol: number | null = null;
+    let problem: string | null = null;
     for (const r of results.slice(1)) {
       if (!r.text) continue;
       if (/^total$/i.test(r.text)) {
-        if (totalCol !== null) throw new QboPnlParseError(`Line ${i + 1} has two "Total" columns.`);
+        if (totalCol !== null) problem ??= `Line ${i + 1} has two "Total" columns.`;
         totalCol = r.col;
-        continue;
+      } else if (!r.res) {
+        problem ??= `Line ${i + 1}, column ${r.col + 1}: the header "${r.text}" isn't a month. Expected labels like "Jan 2026", "January 2026" or "Oct 1-15, 2026". Run Profit and Loss with columns by Months.`;
+      } else if ("error" in r.res) {
+        problem ??= `Line ${i + 1}: ${r.res.error}`;
+      } else {
+        columns.push({ col: r.col, column: r.res.column });
       }
-      if (!r.res) {
-        throw new QboPnlParseError(
-          `Line ${i + 1}, column ${r.col + 1}: the header "${r.text}" isn't a month. Expected labels like "Jan 2026", "January 2026" or "Oct 1-15, 2026". Run Profit and Loss with columns by Months.`,
-        );
-      }
-      if ("error" in r.res) throw new QboPnlParseError(`Line ${i + 1}: ${r.res.error}`);
-      columns.push({ col: r.col, column: r.res.column });
+    }
+    if (problem) {
+      firstError ??= { index: i, message: problem };
+      continue;
+    }
+    if (firstError && rows.slice(firstError.index + 1, i).some((r) => r.slice(1).some((c) => c.trim() && parseCellAmount(c) !== null))) {
+      throw new QboPnlParseError(firstError.message);
     }
     checkContiguous(columns.map((c) => c.column), i + 1);
     return { index: i, columns, totalCol };
   }
   throw new QboPnlParseError(
-    firstError ??
+    firstError?.message ??
       `Couldn't find the header row with the month columns (like ",Jan 2026,Feb 2026,...,Total"). Run Profit and Loss with columns by Months, Cash basis, and export it to CSV.`,
   );
 }
@@ -400,9 +417,10 @@ export function parseQboPnl(text: string): QboPnl {
     const r = body[i];
     if (r.blank) continue;
     // The footer ("Cash Basis Saturday, November 7, 2026 ...") comes after the last section and may be
-    // unquoted, spilling into the amount columns, so its cells are not read.
+    // unquoted, spilling date text into the amount columns, so its bad cells are not read. One with
+    // amounts ("Cash Basis Adjustment,500.00") is not the footer: it goes on to fail below.
     const footer = BASIS.exec(r.first);
-    if (footer && !stack.length) {
+    if (footer && !stack.length && !r.hasAmounts) {
       basis = footer[1].toLowerCase() as "cash" | "accrual";
       continue;
     }
