@@ -3,6 +3,13 @@ import { Suspense } from "react";
 import { Card, PageHeader, Skeleton } from "@/components/ui";
 import { getRecentImports } from "@/lib/data";
 import { ImportFlow } from "./import-flow";
+import { RecentImportRow } from "./recent-import-row";
+
+const undoneDate = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Indiana/Indianapolis",
+  month: "short",
+  day: "numeric",
+});
 
 export const metadata: Metadata = { title: "Import" };
 
@@ -35,12 +42,16 @@ async function ImportContent() {
         <Card title="Recent imports">
           <ul className="divide-y divide-line text-sm">
             {recent.map((b) => (
-              <li key={b.id} className="flex justify-between gap-3 py-2">
-                <span className="min-w-0 truncate">{b.filename}</span>
-                <span className="shrink-0 text-ink-2">
-                  {b.insertedCount} added · {b.skippedCount} skipped
-                </span>
-              </li>
+              <RecentImportRow
+                key={b.id}
+                batch={{
+                  id: b.id,
+                  filename: b.filename,
+                  insertedCount: b.insertedCount,
+                  skippedCount: b.skippedCount,
+                  undoneOn: b.undoneAt ? undoneDate.format(b.undoneAt) : null,
+                }}
+              />
             ))}
           </ul>
         </Card>
